@@ -1,0 +1,111 @@
+#Docker 
+sudo apt-get install -y docker-engine
+docker --version
+sudo wget -qO- https://get.docker.io/ | sh
+
+sudo docker pull hello-world
+sudo docker images
+docker run hello-world
+sudo service docker status
+sudo service docker restart
+docker history
+sudo docker push busybox
+sudo docker pull busybox:1.24
+sudo docker images --no-trunc
+sudo docker pull registry.example.com/myapp
+sudo docker search mysql
+sudo docker run -i -t ubuntu:16.04 /bin/bash
+sudo docker attach hello-world
+sudo docker diff d5ad60f174d3(ID)
+sudo docker start/stop/pause/unpause d5ad60f174d3(ID)
+sudo docker commit d5ad60f174d3(ID)
+sudo docker logs
+
+sudo git clone https://github.com/openstack-dev/devstack.git /opt/devstack/
+cd /opt/devstack/
+sudo tools/create-stack-user.sh
+sudo chown -R stack:stack /opt/devstack/
+sudo -i -u stack
+cd /opt/devstack/
+
+
+#OpenStack
+openstack service create --name glance --description "OpenStack Image service" image
+openstack service list
+openstack endpoint create \
+          --publicurl http://10.0.2.15:9292 \
+          --internalurl http://10.0.2.15:9292 \
+          --adminurl http://10.0.2.15:9292
+          --region RegionOne image
+openstack endpoint list
+
+source keystonerc_admin
+openstack project create --description "Test project" apress
+openstack project list
+
+openstack user create --password-prompt apressuser
+openstack role add --project apress --user apressuser _member_
+openstack role list
+
+openstack user delete apressuser
+openstack project delete apress
+systemctl status memcached.service
+openstack endpoint show identity
+
+wget -P /tmp http://download.cirros-cloud.net/0.3.4/cirros-0.3.4-x86_64-disk.img
+qemu-img info /tmp/cirros-0.3.4-x86_64-disk.img
+openstack image create --file /tmp/cirros-0.3.4-x86_64-disk.img --disk-format qcow2 \
+					   --container-format bare --public cirros-0.3.4-x86_64
+openstack image add project
+
+source keystonerc_demo
+neutron net-create ext-net --router:external True --provider:physical_network external --provider:network_type flat
+neutron subnet-create ext-net --name ext-subnet --allocation-pool
+        start=10.0.2.100,end=10.0.2.200 --disable-dhcp --gateway 10.0.2.2 10.0.2.0/24
+neutron net-list
+
+neutron net-create demo-net
+neutron subnet-create demo-net --name demo-subnet --gateway 172.16.0.1 172.16.0.0/24
+neutron router-create demo-router
+neutron router-interface-add demo-router demo-subnet
+#set ext-net as a gateway for the router
+neutron router-gateway-set demo-router ext-net
+
+source keystonerc_admin
+neutron port-list
+#reach out to an external network
+neutron floatingip-create ext-net
+nova list
+nova port-list
+neutron floatingip-associate node-identity
+
+nova secgroup-create apress-sgroup "Apress secgroup"
+nova secgroup-add-rule apress-sgroup tcp 22 22 0.0.0.0/0
+nova add-secgroup apressinstance11 apress-sgroup
+nova remove-secgroup apressinstance1 default
+nova secgroup-list-rules apress-sgroup
+neutron quota-show
+
+#Nova: manage basic virtual machines functions like creating, starting, stopping
+
+openstack flavor list
+
+source keystonerc_admin
+#create flavor name m10.tiny that has a 3GB disk, 400Mb RAM, and 1 vCPU
+nova flavor-create --is-public true m10.tiny auto 400 3 1
+nova flavor-delete m10.tiny
+
+nova keypair-add apresskey1 > ~/apresskey1
+nova keypair-list
+chmod 600 apresskey1
+ssh -i ~/apresskey1 cirros@192.168.0.1
+nova boot --flavor m10.tiny --image cirros-raw --security-groups apress-sgroup --key-name apresskey1 apressinstance1
+nova get-vnc-console apressinstance1 novnc
+nova stop/delete/reboot apressinstance1
+nova image-create apressinstance1 apressinstance1_snap
+nova quota-show
+nova hypervisor-list
+nova-manage vm list | grep active
+systemctl status *nova* -n 0
+openstack service show nova
+openstack endpoint show nova
