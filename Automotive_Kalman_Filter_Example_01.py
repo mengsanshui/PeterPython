@@ -1,3 +1,8 @@
+from __future__ import print_function, division
+import matplotlib.pyplot as plt
+import bar_plot
+import numpy as np
+
 # This is just simple 1 dimension Kalman Filer define
 class KalmanFilter1D:
 	def __init__(self, x0, P, R, Q):
@@ -28,4 +33,37 @@ class KalmanFilter1D:
 	def update_01(mean, variance, measurement, measurement_variance):
 		return multiply(mean, variance, measurement, measurement_variance)
 	
-	
+#This is an example to ues KalmanFilter1D
+def volt(temp_variance):
+	return random.randn()*temp_variance + 10.3
+
+temp_variance = 2.13**2
+movement_error = .2
+movement = 0
+N=50
+zs = [volt(temp_variance) for i in range(N)]
+ps = []
+estimates = []
+
+kf = KalmanFilter1D(x0=25, # initial state
+		    P = 1000, # initial variance - large says 'who knows?'
+		    R=temp_variance, # sensor noise
+		    Q=movement_error) # movement noise
+
+for i in range(N):
+	kf.predict(movement)
+	kf.update(zs[i])
+	# save for latter plotting
+	estimates.append(kf.x)
+	ps.append(kf.P)
+
+# plot the filter output and the variance
+plt.scatter(range(N), zs, marker='+', s=64, color='r', label='measurements')
+plt.plot(estimates, label='filter')
+plt.legend(loc='best')
+plt.xlim((0,N));plt.ylim((0,30))
+plt.show()
+plt.plot(ps)
+plt.title('Variance')
+plt.show()
+
