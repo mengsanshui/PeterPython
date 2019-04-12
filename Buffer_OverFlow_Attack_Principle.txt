@@ -1,5 +1,5 @@
 This is the Buffer OverFlow attack principle.
-The key point is to find the address of EIP/ESP and R14/R13.
+The key point is to find the address of EIP/ESP and R15/R13.
 used tool such as as/nasm, gdb, Ropper, Metasploit etc.
 
 
