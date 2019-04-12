@@ -1,6 +1,14 @@
 This is the Buffer OverFlow attack principle.
 The key point is to find the address of EIP/ESP and R14/R13.
+used tool such as as/nasm, gdb, Ropper, Metasploit etc.
 
+
+-----------------------------------------------------
+            |		|	 |	 	|
+	    |		|	 |	 	|
+Junk Pad    | JMP ESP   |  NOPs  | Shellcode	|
+	    |		|	 |	        |
+-----------------------------------------------------
 
 X86-64 Arch to detect EIP and ESP 
 
@@ -11,12 +19,30 @@ BUF     |   EBP |  EIP  |PAD |   ESP	|
 	|	|	|    |		|
 -----------------------------------------------------
 
-ARM Arch to detect R14 and R13
+ARM Arch to detect R15 and R13
 
 -----------------------------------------------------
         |	|	|    |		|
 	|	|	|    |		|
-BUF     |   R11 |  R14  |PAD |   R13	|
+BUF     |   R11 |  R15  |PAD |   R13	|
 	|	|	|    |		|
 -----------------------------------------------------
+
+
+
+X86/64 reg compare with ARM arch
+r0 		General Purpose 				EAX
+r1 		General Purpose 				EBX
+r2 		General Purpose 				ECX
+r3 		General Purpose 				EDX
+r4 		General Purpose 				ESI
+r5 		General Purpose 				EDI
+r6 		General Purpose
+r11(fp) 	Frame Pointer 					EBP
+r12 		Intra Procedural Call
+r13(sp) 	Stack Pointer 					ESP
+r14(lr) 	Link Register
+r15(pc) 	Program Counter/Instruction Pointer 		EIP
+CPSR            Current Program State Register/Flags 		EFLAGS
+
 
