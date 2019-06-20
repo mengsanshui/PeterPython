@@ -1,0 +1,119 @@
+#Blue Team Host Statas Basic Check Method
+
+#Network Scan Method
+
+smbtree -b/-D/-S
+smbstatus
+
+#Ping scan
+for ip in $(seq 1 254); do ping -c 1 192.168.1.$ip>/dev/null; [ $? -eq 0 ] && echo "192.168.1.$ip UP" 11 : ; done
+
+#DHCP
+grep -Ei 'dhcp' /var/log/syslog.1
+tail -f dhcpd. log
+
+#DNS View
+rndc querylog
+tail -f /var/log/messages I grep named
+
+#Network Protect Method
+
+#Hash all executable files to record and compare period
+find /opt/sbin/ -type f -exec mdSsum {} >> mdSsums.txt \;
+
+#Firewall rule
+iptables-save > firewall.out
+iptables-restore < firewall.out
+
+iptables -A INPUT -s 10.10.10.10 -j DROP
+iptables -A INPUT -s 10,10.10.0/24 -j DROP
+iptables -A INPUT -p tcp --dport ssh -s 10.10.10.10 -j DROP
+#Block all connections:
+iptables-policy INPUT DROP
+iptables-policy OUTPUT DROP
+iptables-policy FORWARD DROP
+#Log all denied iptables rules:
+iptables -I INPUT 5 -m limit --limit 5/min -j LOG --log-prefix "iptables denied: " --log-level 7
+
+#IPsec rule
+iptables -A INPUT -p esp -j ACCEPT
+iptables -A INPUT -p ah -j ACCEPT
+iptables -A INPUT -p udp --dport 500 -j ACCEPT
+iptables -A INPUT -p udp --dport 4500 -j ACCEPT
+
+#Host protect
+echo 127.0.0,1 <MALICIOUS DOMAIN> >> /etc/hosts
+dns-clean start
+nscd -i hosts
+dnsmasq restart
+
+#Use Whitelist to set proxy method
+def FindProxyForURL(url, host) {
+#Send bad DNS name to the proxy
+	if (dnsDomainis(host, ",badsite.com"))
+		return "PROXY http://127.0.0.1:8080";
+#Send bad IPs to the proxy
+	if (isinNet(myipAddress(), "10.10.10.10","255.255.255.0"))
+		return "PROXY http://127.0.0.1:8080";
+#All other traffic bypass proxy
+	return "DIRECT";
+}
+
+#Network Detect method
+
+tcpdump -tttt -n -vv
+tcpdump -nn -c 1000 jawk '{print $3}' I cut -d. -fl-4 I sort -n I uniq -c I sort -nr
+tcpdump host 10.0.0.1 && host 10.0.0.2
+tcpdump not net 10.10 && not host 192.168.1.2
+tcpdump host 10.10.10.10 && \(10.10.10.20 or 10.10.10.30\)
+tcpdump -n -s65535 -c 1000 -w '%host_%Y-%m%d_%H:%M:%S.pcap'
+tcpdump -w - I ssh 192.168.1.2 -p 50005 "cat - > /tmp/remotecapture.pcap"
+#Get clear text protocol passwords
+tcpdump -n -A -s0 port http or port ftp or port smtp or port imap or port pop3 
+I egrep -i 'pass=|pwd=|log=|login=|user=|username=|pw=|passw=|passwd=|password=|pass:|user:|username:|password:|login:|pass|user' 
+--color=auto --line-buffered -B20
+tcpdump not ip6
+tcpdump ip6
+
+#tcpdumps to files rotating every hour
+tcpdump -pni any -s65535 -G 3600 -w any%Y-%m%d_%H:%M:%S.pcap
+
+#Look for suspicious and self-signed SSL certificates
+tcpdump -s 1500 -A '(tcp[((tcp[12:1] & 0xf0) >> 2)+5:1] = 0x01) and (tcp[((tcp[12:1] & 0xf0) >> 2):1] : 0x16)'
+
+
+#Network Honey method
+#create TCP Firewall rules to block any hosts connecting on port 1234
+while [ 1 ] ; 
+echo "started" ; 
+do IP='nc -v -l -p 1234 2>&1 l> /dev/null | grep from | cut -d[ -f 3 | cut -d] -f 1'; 
+iptables -A INPUT -p tcp -s ${IP} -j DROP ; 
+done
+
+nc -v -k -l 80
+nc -v -k -l 443
+nc -v -k -l 3389
+
+dnstop -l 3 eth0
+
+#Network Audit/Backup method
+tail /var/log/auth. log
+grep -i "fail" /var/log/auth.log
+grep -i sudo /var/log/auth.log
+
+grep -i samba /var/log/syslog
+grep -i cron /var/log/syslog
+watch -n 300 -d ls -lR /<Suspicious File Dir>
+netstat -ac 5 I grep tcp
+lsof -nPi | cut -f 1 -d " "| uniq | tail -n +2
+
+dd if=/dev/mem of=/tmp/<Mem>.dd
+gcore <PID> | strings
+
+bzip2 -c /dev/<INPUT DEVICE> | nc 192.168.1.2 1234 
+nc -p 1234 -l | bzip2 -d I dd of=/dev/sdb
+
+dd if=/dev/<INPUT DEVICE> bs=16M | nc 1234
+nc -p 1234 -l -vv I pv -r | dd of=/dev/<INPUT DEVICE> bs=16M
+
+ssh root@192.168.1.2 tcpdump -i any -U -s 0 -w - 'not port 22'
