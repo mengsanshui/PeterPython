@@ -16,6 +16,41 @@ tail -f dhcpd. log
 rndc querylog
 tail -f /var/log/messages I grep named
 
+searchsploit -t linux remote
+searchsploit -t smb
+searchsploit -t tcp
+searchsploit -t snmp
+searchsploit -t mysql
+msf > use auxiliary/scanner/portscan/syn
+      set INTERFACE eth0
+      set PORTS 80
+      set RHOSTS 192.168.1.0/24
+      set THREADS 50
+      run
+
+      use auxiliary/scanner/smb/smb_version
+      set RHOSTS 192.168.1.100-200
+      run
+	
+	
+      use auxiliary/scanner/ip/ipidseq
+      set RHOSTS 192.168.1.0/24
+      set THREADS 50
+      run
+	
+      nmap -Pn -sI 192.168.1.109 192.168.1.110
+	
+      use auxiliary/scanner/snmp/snmp_login
+      set RHOSTS 192.168.1.0-192.168.2.255
+      set THREADS 10 
+      run
+	
+      snmp-check -v2c -c public 192.168.1.109
+  
+      
+      sqlmap -u "http://192.168.1.100/wordpress/wp-content/index.php?ss_id=1"
+      
+
 #Network Protect Method
 
 #Hash all executable files to record and compare period
