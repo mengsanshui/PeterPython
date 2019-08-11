@@ -1,0 +1,144 @@
+The cybersecurity penetration testing basic step for wireless route and IoT, also simple example tool for reference.
+You must use the more professional tool in practice.
+
+This is the common security check list as following.
+1. Check the device whether update firmware and software by OTA.
+1.1 Analyze the firmware to check whether saved plaintext username and password in package.
+    Use tool such as tar and strings on Linux, IDA Pro if possible.
+1.2 Analyze the firmware to check whether has related remote server information such as login credential.
+    Used tool such as tar and strings on Linux,, IDA Pro if possible.
+1.3 Analyze the firmware to check whether used the vulerable library such as libc etc.
+    Used tool such as tar, strings, strace, readelf, lsof on Linux.
+1.4 Analyze the firmware to check whether hardcode the root's password since need overwrite flash file.
+	Used tool such as tar, strings, readelf on Linux, IDA Pro if possible.
+1.5 Analyze the firmware to check whether can modify it such as replace the vulnerable libc file then bypass integrity verification.
+	Used tool such as tar, strings, realelf, md5sum/sha1sum on Linux.
+1.6 Analyze the fireware to check whether invoke the OS command injection within application such as invoke 'system(argv[1])' without protected
+    or directly invoke shell script on Linux platform etc.
+    Used tool such as tar, strings, readelf on Linux, IDA Pro if possible.
+1.7 Analyze the device whether erase all user data such as password after reset device.
+1.8 Analyze the device whether restore default configuration while update firmware or software with special intervention such as power off/on device.
+1.9 Analyze the device whether run the most application with root privilege.
+
+
+2. Check the device whether has open peripheral interface such as USB, EMMC, UART etc.
+2.1 Analyze the USB interface to check whether can run application without privilege through USB device.
+	Also need to check whether allow diverse category USB type such as storage/network/UART etc.
+2.2 Analyze the EMMC interface to check whether can run application without privilege through EMMC device.
+2.3 Analyze the UART inferface to check whether can login in system without password or brute-force crack.
+
+3. Check the web page whether has vulnerabilities.
+   There is a global OWASP Testing Guide v4 here for reference: https://www.owasp.org/images/1/19/OTGv4.pdf
+3.1 Analyze the login page to check whether can login with known username and password such as 'amdin' and '123456'.
+    In general there was already known username and password list file for use.
+3.2 Analyze the login page to check whether mandatory change the default password after the first login.
+3.3 Analyze the login page to check input validation such as character limit with only number, alphabet, underline with fixed length.
+3.4 Analyze the login page to check input validation such as buffer overflow, XSS, SQL Injection etc.
+    Used tool such as Nikto or w3af to scan the web vulnerabilities.
+
+
+4. Check the moblie application for this device that run on smartphone with remote control function.
+4.1 Analyze the moblie application whether has the plaintext username and password, remote server credential.
+    Used tool such as Apktool for android applicaion.
+4.2 Analyze the moblie application whether transmit the message without encrypt.
+    Used tool such as Wireshark or tcpdump.
+4.3 Analyze the mobile application whether send the critial information such as application list, smartphone's contact list to backend server.
+	Used tool such as Wireshark or tcpdump.
+4.4 Analyze the mobile application whether send the critial log such as system information, key operation to backend server.
+	Used tool such as Wireshark or tcpdump.
+4.5 Analyze the device whether transmit the plaintext information to remote backend server.
+    Used tool such as Wireshark or tcpdump.
+4.6 Analyze the both the moblie applicattion and device whether used vulnerable version of fucntion or ciphering algorithm library such as TLS1.0.
+    Used tool such as file, strings, openssl on Linux platform.
+
+5. Check kinds of ineternet service such as telnet, ftp, ssh, snmp, dhcp, UPnP, dns, SMB, NTP, voip such as SIP etc.
+5.1 Enumeration and identification the service information with port scan method.
+	Used tool such as nmap, masscan, scapy to scan open ports and application information commonly.
+5.2 Analyze the SMB with tool such as smbtree, smbstatus etc.
+5.3 Analyze the DNS with tool such as rndc, dns-clean, dnsmasq etc.
+5.4 Analyze the SNMP with tool such as snmp-check etc.
+5.5 Analyze the service information with vulnerabilities.
+	  Used tool such as Nmap, Metasploit, information search with https://www.exploit-db.com and http://cve.mitre.org.
+	
+	
+6. Check the default Firewall/IDS setting with Dos, DDoS attack etc.
+6.1 Analyze the rule of firmware whether saved in unsecure place.
+6.2 Analyze the whether the default firewall can mitigates the affect of Dos, DDoS.
+    Used tool such as Scapy to send the flood packet and check the status of system.
+6.3 Analyze the whether the firewall enabled whitelist mechanism.
+    Used tool such as Scapy to send the special IP scope packet and check the feedback.
+6.4 Analyze the whether IDS transmit the plaintext message or log to remote server or custom user.
+    Used tool such as Wireshark.
+
+x. Check the device with kinds of wireless technology such as Bluetooth, Wifi, LTE/5G etc.
+7. Check the Bluetooth device with vulnerabilities.
+7.1 Bluetooth device type.
+	Silent: The device will never accept any connections, It just monitors BT traffic.
+	Private: The device cannot be discovered but connection will be accepted only if the Master device know it's BD_ADDR.
+	Public: The device can be both discovered and connected to.
+7.2 Security mode.
+	None: The Bluetooth device does not include securre option.
+	Service Level: Two Bluetooth devices can establish a nonsecure ACL link.
+	Link Level: Secure initiated when an ACL link is established.
+	After EDR2.0, Secure Simple Pairing(SSP) introduces the public key to improve the security.
+	Bluetooth authenticates devices, not user.
+7.3 Analyze the bluetooth device vulnerabilities with diverse tool here.
+    Analyze the config file whether saved in unsecure place.
+    Used tools such as hciconfig, hcitool, sdptool, l2ping to gather the information on Linux platform.
+	Used tool based on Linux BlueZ stack with Python tool here: https://github.com/karulis/pybluez
+	Search vulnerable information with https://www.exploit-db.com and http://cve.mitre.org.
+7.4 Attack the Bluetooth device such as with following tool etc.
+	Used tool for BlueBorne vulnerabilities attack with https://github.com/ArmisSecurity/blueborne
+	Used tool for bluetooth phonebook attack with https://github.com/boos/bluesnarfer
+	
+8. Check the Wifi device with vulnerabilities.
+8.1 According the IEEE Std 802.11-2016, just list key information here.
+	Mode: AP, STA
+    Frame type : Management, Control, Data, Extension
+	Security methods: WEP, WPA1(TKIP), WAPI, WPA2(CCMP), WPA3(SAE)， IEEE 802.1X Authentication(RADIUS)
+8.2 Analyze the Wifi device vulnerabilities with diverse tool here.
+	Analyze the config file whether saved in unsecure place.
+    Used tools such as ifconfig, iwconfig, iw, wireshark, airmon-ng, airodump-ng
+	Search vulnerable information with https://www.exploit-db.com and http://cve.mitre.org.
+8.3 Analyze the whether enabled default AP function with default password such as '12345678'.
+8.4 Attack the Wifi device such as with following tool etc.
+    Used tool for WEP and other kinds of WPA1/WPA2 attack with http://www.aircrack-ng.org
+    Used tool for WPA PSK attack with https://github.com/FluxionNetwork/fluxion.git
+
+	
+9. Check the LTE and 5G device with vulnerabilities.
+9.1 According the 3GPP specification, just list key information here.
+    5G system is complete IP based end-to-end network architecture.
+    It key feature and network capabilities is such as latency, data rate, mobility, reliability, security.
+    Mode for LTE:
+    UE:  This is the terminal equipment that can be embedded in smartphone or other device such as PAD, CPE, Smart Home etc.
+    EPS: This is the core network that include eNB, MME, S-GW, P-GW, HSS etc.	
+    Mode for 5G:
+    UE:  This is the terminal device similar with LTE.
+    5GC: This is the core network that include gNB, ng-eNB, AMF, UPF, SMF.
+    Connect Mode:
+	  UE---------Radio-------eNB/gNB-----Ethernet/Fiber-------EPC/5GC-------Ethernet/Fiber-------Internet
+9.2 Device security threat.
+	a. Inconsistent security policies such as use the rule of firewall while deployment kinds of devices.
+	b. Information or data leakage in shared media such as exchange the message by Internet without encypt.
+	c. Minimal device management requirement such as IoT field.
+	d. Save the readable data in disposed devices such as on external SD card or cloud.
+	e. inter-application data leakage such as authorization by third party aplication or save data with cloud network.
+	f. VOIP related vulnerabilities such SIP/H.323. 
+9.3 Security mode.
+	In general, the security attack method is Distributed denial of service(DDoS) and Advance persistent threat(APT) for core network(telecommunications carriers).
+	This means the most vulnerabilities is based on internet application attack.
+9.4 Terminal equipment(UE) security.
+   Smartphone(iOS, Androind security. )
+   CPE and IoT(OS such as Linux, FreeRTOS, QNX security. Common security such as User Identity, Authentication, Authorization, Shared information, Faked eNB etc)
+9.4 Core Network(EPC/5GC) security.
+   EPS security such as related eNB, MME, S-GW, P-GW, HSS etc.
+   5GC security such as related gNB, ng-eNB, AMF, UPF, SMF etc.
+   5G core network will based on Hypervisor, SDN, NFV later then will expose more security threat.
+   For example, NAS attack point such as attach, detach, bearer activation, tracking area update, authentication procedures etc.
+9.5 Layer security.
+    LTE UE:   PHY, MAC, RLC, PDCP, RRC, NAS
+	  LTE CORE: PHY, MAC, RLC, PDCP, RRC, NAS, MME, S-GW, P-GW, HSS
+	  5G  UE:   PHY, MAC, RLC, PDCP, SDAP, RRC, NAS
+	  5G CORE:  PHY, MAC, RLC, PDCP, SDAP, RRC, NAS, AMF, UPF, SMF
+	
