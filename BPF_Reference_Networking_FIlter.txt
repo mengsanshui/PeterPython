@@ -1,0 +1,114 @@
+
+#This is just reference example eBPF filter file
+#You can find the these define related netwotking packet filter in bpf_types.h
+#You can also reference the samples/bpf/bpf_load.c
+/******
+#ifdef CONFIG_NET
+BPF_PROG_TYPE(BPF_PROG_TYPE_SOCKET_FILTER, sk_filter)
+BPF_PROG_TYPE(BPF_PROG_TYPE_SCHED_CLS, tc_cls_act)
+BPF_PROG_TYPE(BPF_PROG_TYPE_SCHED_ACT, tc_cls_act)
+BPF_PROG_TYPE(BPF_PROG_TYPE_XDP, xdp)
+#ifdef CONFIG_CGROUP_BPF
+BPF_PROG_TYPE(BPF_PROG_TYPE_CGROUP_SKB, cg_skb)
+BPF_PROG_TYPE(BPF_PROG_TYPE_CGROUP_SOCK, cg_sock)
+BPF_PROG_TYPE(BPF_PROG_TYPE_CGROUP_SOCK_ADDR, cg_sock_addr)
+#endif
+BPF_PROG_TYPE(BPF_PROG_TYPE_LWT_IN, lwt_in)
+BPF_PROG_TYPE(BPF_PROG_TYPE_LWT_OUT, lwt_out)
+BPF_PROG_TYPE(BPF_PROG_TYPE_LWT_XMIT, lwt_xmit)
+BPF_PROG_TYPE(BPF_PROG_TYPE_LWT_SEG6LOCAL, lwt_seg6local)
+BPF_PROG_TYPE(BPF_PROG_TYPE_SOCK_OPS, sock_ops)
+BPF_PROG_TYPE(BPF_PROG_TYPE_SK_SKB, sk_skb)
+BPF_PROG_TYPE(BPF_PROG_TYPE_SK_MSG, sk_msg)
+BPF_PROG_TYPE(BPF_PROG_TYPE_FLOW_DISSECTOR, flow_dissector)
+#endif
+******/
+
+bool is_socket = strncmp(event, "socket", 6) == 0;
+bool is_tracepoint = strncmp(event, "tracepoint/", 11) == 0;
+bool is_xdp = strncmp(event, "xdp", 3) == 0;
+bool is_perf_event = strncmp(event, "perf_event", 10) == 0;
+bool is_cgroup_skb = strncmp(event, "cgroup/skb", 10) == 0;
+bool is_cgroup_sk = strncmp(event, "cgroup/sock", 11) == 0;
+bool is_sockops = strncmp(event, "sockops", 7) == 0;
+bool is_sk_skb = strncmp(event, "sk_skb", 6) == 0;
+bool is_sk_msg = strncmp(event, "sk_msg", 6) == 0;
+
+
+if (is_socket) {
+	prog_type = BPF_PROG_TYPE_SOCKET_FILTER;
+} else if (is_tracepoint) {
+	prog_type = BPF_PROG_TYPE_TRACEPOINT;
+} else if (is_xdp) {
+	prog_type = BPF_PROG_TYPE_XDP;
+} else if (is_perf_event) {
+	prog_type = BPF_PROG_TYPE_PERF_EVENT;
+} else if (is_cgroup_skb) {
+	prog_type = BPF_PROG_TYPE_CGROUP_SKB;
+} else if (is_cgroup_sk) {
+	prog_type = BPF_PROG_TYPE_CGROUP_SOCK;
+} else if (is_sockops) {
+	prog_type = BPF_PROG_TYPE_SOCK_OPS;
+} else if (is_sk_skb) {
+	prog_type = BPF_PROG_TYPE_SK_SKB;
+} else if (is_sk_msg) {
+	prog_type = BPF_PROG_TYPE_SK_MSG;
+} else {
+	printf("Unknown event '%s'\n", event);
+	return -1;
+}
+
+##Above code is reference from bpf_load.c to show kinds of packet type filter.
+##Following code is just an exampe to show how to load eBPF rule and get the result.
+
+struct bpf_map_def SEC("maps") packet_countmap = {
+	.type = BPF_MAP_TYPE_ARRAY,
+	.key_size = sizeof(int),
+	.value_size = sizeof(int),
+	.max_entries = 256,
+};
+
+
+SEC("socket")
+int socket_prog(struct __sk_buff *skb) {
+	int proto = load_byte(skb, ETH_HLEN + offsetof(struct iphdr, protocol));
+	int one = 1;
+	int *item = bpf_map_lookup_elem(&packet_countmap, &proto);
+	if (item) {
+		(*item)++;
+	} else {
+		item = &one;
+	}
+	bpf_map_update_elem(&packet_countmap, &proto, item, BPF_ANY);
+	return 0;
+}
+
+## Compile above code with 'clang -O2 -target bpf -c bpf_program.c -o bpf_program.o'
+## Then you can load the bpf_program.o as filter file that showed in bpf_load.c
+## Also open the local socket to attach the packet filter.
+
+
+if (load_bpf_file(filename)) {
+	printf("%s", bpf_log_buf);
+	return 1;
+}
+
+sock = open_raw_sock("lo");
+if (setsockopt(sock, SOL_SOCKET, SO_ATTACH_BPF, prog_fd, sizeof(prog_fd[0]))) {
+	printf("setsockopt %s\n", strerror(errno));
+	return 0;
+}
+
+
+##Put the information from user space
+for (i = 0; i < 5; i++) {
+	key = IPPROTO_TCP;
+	assert(bpf_map_lookup_elem(map_fd[0], &key, &tcp_cnt) == 0);
+	key = IPPROTO_UDP;
+	assert(bpf_map_lookup_elem(map_fd[0], &key, &udp_cnt) == 0);
+	key = IPPROTO_ICMP;
+	assert(bpf_map_lookup_elem(map_fd[0], &key, &icmp_cnt) == 0);
+	printf("TCP %d UDP %d ICMP %d packets\n", tcp_cnt, udp_cnt, icmp_cnt);
+	sleep(3);
+}
+
