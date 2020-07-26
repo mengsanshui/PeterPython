@@ -1,0 +1,93 @@
+#This is just a simple IDS  Suricat Code Analsis record.
+
+#Gateway mode
+watch 'mpstat -u -I SUM -P ALL 1 1 | egrep -v Aver'
+ethtool -L eth2 combined 1
+ethtool -C eth2 adaptive-rx on rx-usecs 100
+ethtool -C eth3 adaptive-rx on rx-usecs 100
+ethtool -G eth2 rx 1024
+set_irq_affinity 1 eth2
+set_irq_affinity 1 eth3
+
+net.ipv4.tcp_window_scaling = 1
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+
+/sys/class/net/eth2/statistics/
+/proc/net/dev
+
+sudo iptables -I FORWARD -j NFQUEUE
+
+#host mode with tcp or htpp:80
+sudo iptables -I INPUT -j NFQUEUE
+sudo iptables -I OUTPUT -j NFQUEUE
+
+sudo iptables -I INPUT -p tcp  -j NFQUEUE
+sudo iptables -I OUTPUT -p tcp -j NFQUEUE
+sudo iptables -I INPUT -p tcp --sport 80  -j NFQUEUE
+sudo iptables -I OUTPUT -p tcp --dport 80 -j NFQUEUE
+
+sudo iptables -vnL
+
+sudo iptables -I FORWARD -i eth0 -o eth1 -j NFQUEUE
+sudo iptables -I FORWARD -i eth1 -o eth0 -j NFQUEUE
+
+#XDP kernel >= 4.13 clang >= 3.9
+systemctl stop irqbalance
+systemctl disable irqbalance
+sudo apt-get install clang
+cd linux/tools/lib/bpf/
+make && sudo make install
+sudo make install_headers
+sudo ldconfig
+CC=clang ./configure --prefix=/usr/ --sysconfdir=/etc/ --localstatedir=/var/ \
+--enable-ebpf --enable-ebpf-build
+
+make clean && make
+sudo  make install-full
+sudo ldconfig
+#Note enable eBPF function
+sudo mkdir /etc/suricata/ebpf/
+cp ebpf/vlan_filter.bpf /etc/suricata/ebpf/
+
+
+->app
+->SigGroupBuild
+->SigAddressPrepareStage4
+->PrefilterSetupRuleGroup
+->PatternMatchPrepareGroup
+->BUG_ON(a->reg->PrefilterRegister
+->DetectAppLayerMpmRegister or DetectAppLayerMpmRegister2
+
+TmModuleRunInit->tmm_modules->TmModule->ThreadVars->(inq,outq,tmqh_in,tmqh_out)
+
+main() ->
+->RunModeRegisterRunModes # Register four thread-modules: Packet acquisition, decode and stream application layer, detection, and outputs.
+  ->RunModeIdsAFPRegister ->RunModeIdsAFPAutoFp ->RunModeSetLiveCaptureAutoFp ->TmThreadCreatePacketHandler ->TmThreadCreate ->TmThreadSetSlots ->TmThreadsSlotPktAcqLoop
+
+->LoadYamlConfig->ConfYamlLoadFile->ConfYamlParse(suricata.yaml)
+
+PostConfLoadedSetup
+->AppLayerSetup
+  ->AppLayerParserRegisterProtocolParsers
+    ->RegisterHTPParsers
+	
+->TmqhSetup
+  ->TmqhSimpleRegister
+  ->TmqhPacketpoolRegister->TmqhInputPacketpool->PacketPoolGetPacket(tmqh_in)
+						  ->TmqhOutputPacketpool
+	tmqh_in<-TmThreadsSlotVar<-
+  ->TmqhFlowRegister
+    ->TmqhInputFlow(InHandler)/TmqhOutputFlowHash(OutHandler) ->(Key:PacketDequeue/PacketEnqueue/PacketPoolInit)
+   
+->RegisterAllModules
+
+  **->TmModuleReceiveNFQRegister(->ReceiveNFQLoop->NFQRecvPkt->NFQCallBack->NFQSetupPkt->PacketCopyData->TmThreadsSlotProcessPkt->TmThreadsSlotVarRun(tmqh_in/TmqhInputPacketpool or tmqh_out/TmqhOutputFlowHash or tm->Func/DecodeAFP)->PacketEnqueue)
+  **->TmModuleReceiveAFPRegister(->ReceiveAFPLoop->AFPRead->AFPBypassCallback->TmThreadsSlotProcessPkt)
+DefragInit/FlowSetupPacket
+  **->TmModuleDecodeAFPRegister(->DecodeAFP->ThreadVars->DecodeRaw->DecodeIPV4->DecodeIPV4Packet->DecodeTCP->FlowSetupPacket)
+  **->TmModuleFlowWorkerRegister(->FlowWorker->FlowHandlePacket->StreamTcp ->Detect->DetectFlow->FlowGetAppProtocol->DetectRun->DetectRunGetRuleGroup->DetectRunPrefilterPkt->DetectRunTx->AppLayerDefaultGetTxIterator)
+
+  TmqhOutputPacketpool
