@@ -1,0 +1,171 @@
+#This is just the Android/U-boot WFD project I worked before and record here.
+
+u-boot start up code following.
+u-boot/cpu/mips/start.S-> u-boot/board/ar7240/common/lowlevel_init_934x.S/lowlevel_init/ar934x_lowlevel_init 
+-> u-boot/board/ar7240/common/lowlevel_init_934x-1.1.S/ar934x_1_dot_1_lowlevel_init
+
+cpu/mips/start.S -> u-boot/lib_mips/board.c/board_init_f -> 
+(no COMPRESS_UBOOT :u-boot/lib_mips/board.c/init_sequence/timer_init/env_init->u-boot/common/env_common.c/default_environment/incaip_set_cpuclk/init_baudrate/console_init_f/
+display_banne/checkboard/init_func_ram->initdram->wasp_mem_config->wasp_ddr_initial_config) 
+(COMPRESS_UBOOT : u-boot/lib_bootstrap/bootstrap_board.c/init_sequence -> lib_mips/board.c/display_banner(print u-boot version)u-boot/lib_bootstrap/bootstrap_board.c/init_func_ram-> u-boot/board/ar7240/db12x/db12x.c/initdram
+-> u-boot/board/ar7240/db12x/db12x.c/wasp_mem_config -> u-boot/cpu/mips/ar7240/meminit.c/wasp_ddr_initial_config )
+-> u-boot/lib_mips/board.c/checkboard(print DRAM)-> env_init-> cpu/mips/start.S/relocate_code -> u-boot/lib_mips/board.c/board_init_r
+-> u-boot/board/ar7240/common/ar7240_flash.c/flash_init -> u-boot/board/ar7240/db12x/flash.c/flash_get_geom -> u-boot/lib_mips/board.c/display_flash_config
+-> u-boot/lib_mips/board.c/display_flash_config -> u-boot/lib_mips/board.c/mem_malloc_init -> u-boot/lib_mips/board.c/env_relocate
+->u-boot/drivers/pci.c/pci_init(yes CONFIG_PCI)->u-boot/board/ar7240/common/ar7240_pci.c/pci_init_board
+->u-boot/board/ar7240/common/ar7240_pci.c/plat_dev_init ->->u-boot/common/devices.c/devices_init
+  (devices_init/i2c_init/drv_lcd_init/drv_video_init/drv_keyboard_init/drv_logbuff_init/drv_system_init/serial_devices_init/drv_usbtty_init/drv_nc_init)
+->u-boot/common/exports.c/jumptable_init ->u-boot/common/console.c/console_init_r(no CONFIG_SPLASH_SCREEN/CFG_CONSOLE_IS_IN_ENV)
+->u-boot/net/eth.c/eth_initialize ->(miiphy_init/) -> u-boot/cpu/mips/ar7240/ag934x.c/ag7240_enet_initialize(ag934x_enet_initialize)
+
+Android startup and WFD code flowing.
+
+Android starup method flowing
+-> Zygote
+    (System Server)
+-> System_main.cpp (main) 
+-> System_init.cpp (system_init)
+    (Framework)
+-> SystemServer.java (init2)
+-> SystemServer.java (run) 
+-> DisplayManagerService.java (new)
+-> DisplayManagerService.java (systemReady)
+-> DisplayManagerService.java (sendEmptyMessage(MSG_REGISTER_ADDITIONAL_DISPLAY_ADAPTERS) )
+-> DisplayManagerService.java (handleMessage)
+-> DisplayManagerService.java (registerAdditionalDisplayAdapters)
+-> DisplayManagerService.java (registerWifiDisplayAdapterLocked)
+-> WifiDisplayAdapter.java    ( new WifiDisplayAdapter if wifi display enabled)
+-> DisplayManagerService.java (registerDisplayAdapterLocked(mWifiDisplayAdapter) )
+   Invoke from APP 
+-> DisplaySettings.java (onCreate)
+   (Framework)
+-> WifiDisplayStatus.java (getWifiDisplayStatus)
+-> DisplayManagerGlobal.java (getWifiDisplayStatus)
+-> DisplayManagerService.java (getWifiDisplayStatus)
+-> WifiDisplayAdapter.java (getWifiDisplayStatusLocked)
+-> WifiDisplayStatus.java (new WifiDisplayStatus())
+-> DisplaySettings.java (mWifiDisplayStatus.getFeatureState)
+
+App Framework:
+->packages/apps/Settings/src/com/android/settings/wfd/WifiDisplaySettings.java (onResume->mDisplayManager.scanWifiDisplays())
+->frameworks/base/core/java/android/hardware/display/DisplayManager.java (scanWifiDisplays)
+->frameworks/base/core/java/android/hardware/display/DisplayManagerGlobal.java (scanWifiDisplays)
+->frameworks/base/services/java/com/android/server/display/DisplayManagerService.java(scanWifiDisplays)
+->frameworks/base/services/java/com/android/server/display/WifiDisplayAdapter.java(requestScanLocked)
+->frameworks/base/services/java/com/android/server/display/WifiDisplayController.java(requestScan)
+->frameworks/base/wifi/java/android/net/wifi/p2p/WifiP2pManager.java(discoverPeers)
+->frameworks/base/wifi/java/android/net/wifi/p2p/WifiP2pService.java(p2pFind)
+->frameworks/base/wifi/java/android/net/wifi/p2p/WifiNative.java(p2pFind)
+->frameworks/base/core/jni/android_net_wifi_Wifi.cpp (doCommand, wifi_command)
+->hardware/libhardware_legacy/Wifi.c (wifi_command ,wifi_send_command)
+->external/wpa_supplicant_8/wpa_supplicant
+->packages/apps/Settings/src/com/android/settings/wfd/WifiDisplaySettings.java(connectWifiDisplay, similar process as scan so just list here)
+->frameworks/base/services/java/com/android/server/display/WifiDisplayController.java(connect/updateConnection)
+->frameworks/base/wifi/java/android/net/wifi/p2p/WifiP2pService.java(mProvisionDiscoveryState/p2pConnectWithPinDisplay)
+->frameworks/base/services/java/com/android/server/display/WifiDisplayController.java(updateConnection/RemoteDisplay.listen/onDisplayConnected)
+->frameworks/base/media/java/android/media/RemoteDisplay.java(listen)
+->frameworks/base/core/jni/android_media_RemoteDisplay.cpp(nativeListen/android_view_Surface_createFromIGraphicBufferProducer)
+->frameworks/av/media/libmediaplayerservice/MediaPlayerService.cpp(listenForRemoteDisplay)
+->frameworks/av/media/libmediaplayerservice/RemoteDisplay.cpp(RemoteDisplay)
+->frameworks/media/libstagefright/wifi-display/source/WifiDisplaySource.cpp(start/createRTSPServer)
+->frameworks/av/media/libstagefright/wifi-display/ANetworkSession.cpp(createClientOrServer/kWhatClientConnected)
+->frameworks/media/libstagefright/wifi-display/source/WifiDisplaySource.cpp(onSetupRequest/playbackSession->init)
+->frameworks/media/libstagefright/wifi-display/source/PlaybackSession.cpp(setupPacketizer/addVideoSource/addAudioSource/SurfaceMediaSource/addSource)
+->frameworks/media/libstagefright/wifi-display/source/Converter.cpp(addVideoSource/initEncoder/MediaCodec/MediaPuller/AudioSource/AudioRecord)
+->frameworks/media/libstagefright/wifi-display/source/WifiDisplaySource.cpp(kWhatClientConnected/sendM1/finishPlay/mClient->onDisplayConnected)
+->frameworks/base/services/java/com/android/server/display/WifiDisplayAdapter.java(onDisplayConnected/addDisplayDeviceLocked
+                                                                                   SurfaceControl.createDisplay)
+->frameworks/base/core/java/android/view/SurfaceControl.java(createDisplay/nativeCreateDisplay)
+->frameworks/base/core/jni/android_view_SurfaceControl.cpp(nativeCreateDisplay/SurfaceComposerClient::createDisplay)
+->frameworks/native/services/surfaceflinger/SurfaceFlinger.cpp (createDisplay(DisplayDevice::DISPLAY_VIRTUAL))
+->frameworks/native/libs/ui/FramebufferNativeWindow.cpp(hw_get_module/framebuffer_open/gralloc_open)
+->hardware/libhardware/modules/gralloc/gralloc.cpp(gralloc_device_open)
+->frameworks/native/services/surfaceflinger/DisplayHardware/HWComposer.cpp(hw_get_module/framebuffer_open)
+
+->frameworks/media/libstagefright/wifi-display/source/WifiDisplaySource.cpp(kWhatPlaybackSessionNotify/onDisplayConnected/finishPlay/play)
+->frameworks/media/libstagefright/wifi-display/source/PlaybackSession.cpp (PlaybackSession::play/schedulePullExtractor/onPullExtractor/readSampleData
+                                                                           Converter::kWhatAccessUnit)
+->frameworks/av/media/libstagefright/NuMediaExtractor.cpp(readSampleData/fetchTrackSamples/mSource->read/SurfaceMediaSource::read)
+->frameworks/av/media/libstagefright/SurfaceMediaSource.cpp(read/mBufferQueue->acquireBuffer/mDequeueCondition/dequeueBuffer)
+->frameworks/native/libs/gui/BufferQueue.cpp(acquireBuffer/dequeueBuffer)
+->frameworks/media/libstagefright/wifi-display/source/PlaybackSession.cpp (onMessageReceived/Converter::kWhatAccessUnit/mMediaSender->queueAccessUnit)
+->frameworks/av/media/libstagefright/wifi-display/MediaSender.cpp(queueAccessUnit/packetizeAccessUnit/mHDCP->encrypt/mTSSender->queueBuffer)
+->frameworks/av/media/libstagefright/wifi-display/rtp/RTPSender.cpp(queueBuffer/queueTSPackets/sendRTPPacket)
+
+
+->frameworks/native/services/surfaceflinger/DisplayHardware/HWComposer.cpp(vsync/VSyncThread::threadLoop/mHwc.mEventHandler.onVSyncReceived)
+->frameworks/native/services/surfaceflinger/SurfaceFlinger.cpp(SurfaceFlinger::onVSyncReceived)
+->frameworks/native/services/surfaceflinger/EventThread.cpp(onVSyncReceived/DisplayEventReceiver::DISPLAY_EVENT_VSYN)
+->frameworks/native/services/surfaceflinger/MessageQueue.cpp(eventReceiver/ DisplayEventReceiver::DISPLAY_EVENT_VSYNC
+                                                             mHandler->dispatchRefresh MessageQueue::REFRESH)
+->frameworks/native/services/surfaceflinger/SurfaceFlinger.cpp(onMessageReceived MessageQueue::REFRESH/handleMessageRefresh)
+->frameworks/native/services/surfaceflinger/SurfaceFlinger.cpp(preComposition/doComposition)
+
+Capture screen:
+ScreenRotationAnimation-> SurfaceControl.screenshot-> nativeScreenshot-> ScreenshotClient::capture-> s->captureScreen
+SurfaceFlinger.cpp captureScreen/captureScreenImplCpuConsumerLocked/native_window_dequeue_buffer_and_wait/window->queueBuffer/FramebufferNativeWindow::queueBuffer
+DisplayEventReceiver.java(scheduleVsync)
+MediaCodec.cpp
+
+dhcp:
+->frameworks/base/wifi/java/android/net/wifi/p2p/WifiP2pService.java(GO :P2P_GROUP_STARTED_EVENT/startDhcpServer/mNwService.startTethering(DHCP_RANGE))
+                                                                     GC :mDhcpStateMachine.sendMessage(DhcpStateMachine.CMD_START_DHCP);)
+->frameworks/base/services/java/com/android/server/NetworkManagementService.java(startTethering/mConnector.execute(cmd))
+->frameworks/base/services/java/com/android/server/NativeDaemonConnector.java(execute/makeCommand/mOutputStream.write)
+->system/netd/CommandListener.cpp(TetherCmd::runCommand/sTetherCtrl->startTethering)
+->system/netd/TetherController.cpp(startTethering/ run system/bin/dnsmasq)
+
+SoftAP
+system/netd/SoftapController.cpp
+
+Scan:
+-> WifiDisplaySettings.java (onResume)
+-> DisplayManager.java (scanWifiDisplays)
+-> DisplayManagerGlobal.java (scanWifiDisplays)
+-> DisplayManagerService.java (scanWifiDisplays)
+-> WifiDisplayAdapter.java (requestScanLocked)
+-> WifiDisplayController.java (requestScan)
+-> WifiDisplayController.java (discoverPeers)
+-> WifiDisplayController.java (handleScanStarted)
+-> WifiDisplayController.java (tryDiscoverPeers)
+-> WifiDisplayController.java (requestPeers)
+-> WifiP2pManager.java (discoverPeers)
+-> WifiP2pManager.java (sendMessage(DISCOVER_PEERS, 0, c.putListener(listener)))
+-> WifiP2pService.java (processMessage WifiP2pManager.DISCOVER_PEERS: mWifiNative.p2pFind(DISCOVER_TIMEOUT_S) )
+-> WifiNative.java (p2pFind(), doBooleanCommand("P2P_FIND"))
+-> andriod_net_wifi_Wifi.cpp (doBooleanCommand)
+-> andriod_net_wifi_Wifi.cpp (doCommand, wifi_command)
+-> hardware\libhardware_legacy\Wifi.c (wifi_command ,wifi_send_command)
+-> hardware\libhardware_legacy\Wifi.c (wifi_send_command, wpa_ctrl_request )
+-> wpa_supplicant_ctrl_iface_process -> wpas_p2p_find -> wpas_p2p_scan (NL80211_CMD_TRIGGER_SCAN/ath6kl_cfg80211_scan)
+
+
+1. P2P Invitation: invite P2P Device to join the P2P Group.
+win7 > tv:
+ P2P Invitation Request : p2p Attribute:0x188
+tv > win7:
+    P2P Invitation Response :  Status Code: 1 Fail - information unavailable
+    P2P Invitation Response :Status Code:   0   Success
+    P2P Invitation Response : Status Code: 8  - unknown P2P Group
+2.if Invitation fail, it will re-start with Provision Discovery Request
+pc > B : proble req
+gtv > pc: proble response
+pc > gtv: P2P Inviation Request
+gtv > pc: P2P Invitation Response / Status Code: Fail - information unavailable
+gtv > pc:  Provision Discovery Request
+pc > gtv:  Provision Discovery Response
+ 
+3.
+Provision Discovery Request
+ Provision Discovery Response
+ GO Negotiation Request    
+GO Negotiation Response
+GO Negotiation Confirmation
+wps
+wpa
+ 
+4.
+Provision Discovery Request ？
+Provision Discovery Response ？
+P2P Inviation Request
+P2P Invitation Response
