@@ -169,3 +169,516 @@ Provision Discovery Request ？
 Provision Discovery Response ？
 P2P Inviation Request
 P2P Invitation Response
+
+
+Linux side code foucs on GStream
+
+
+GStreamer is a library for constructing graphs of media-handling components.
+          This mean you can use it to write your own audio/video player.
+Please refer this site to read the Application Development Manual and Plugin Writer's Guide firstly.
+http://gstreamer.freedesktop.org/documentation/
+
+Gstreamer key elements.
+1. Element is the most important class of objects in GStreamer.
+   An element has one specific function, which can be the reading of data from a file, decoding of this data or outputting
+   this data to your sound card (or anything else).
+2. Pipeline It provides a bus for the application and manages the synchronization for its children.
+         Data flow will start and media processing will take place.
+3. Pads are used to negotiate links and data flow between elements in GStreamer.
+4. Buffers are objects for passing streaming data between elements in the pipeline. 
+   Buffers always travel from sources to sinks (downstream).
+
+
+This is the data flow within the pipeline on board.
+RTP data(MPeg-2-TS) --->rtpmp2tdepay --->aiurdemux --->videoqueue --->vpudec --->mfw_v4lsink
+                                                   --->audioqueue --->aacparse --->beepdec --->alsasink
+
+Below is the ways for testing RTP streaming in FSL board.
+For RTP streaming server(IP is 192.168.2.100)
+a.  Start vlc (recommend 1.1.5) with GUI, select Media menu and click Streaming.
+b.  Press Add to load the stream file, press Stream, and then click Next.
+c.  Select “RTP/Mpeg Transport Stream” from the drop-down list, and then click Add.
+d.  Enter the IP address 192.168.2.1(Client's IP) and base port number 5004, and deselect Activate Transcoding.
+e.  press Stream at the bottom. The server is started.
+ 
+Client side:(IP is 192.168.2.1)
+gst-launch udpsrc do-timestamp=false uri=udp://192.168.2.1:5004 caps="application/x-rtp" ! rtpmp2tdepay ! aiurdemux streaming_latency=100 name=d d. ! queue ! vpudec low-latency=true ! queue ! mfw_v4lsink sync=true d. ! queue ! aacparse ! beepdec ! alsasink sync=true
+
+
+Platform precondition.
+1. The video is decoded by hardware(gst_vpudec_chain--(CORE_API VPU_DecDecodeBuf) invoked VPU function)
+2. The audio is decoded by software.(gst_beepdec_chain--（CORE_API decode)then invoke AACDecFrameDecode of lib_aacplusd_wrap_arm11_elinux.so.3)
+Sloution on my side currently.
+1. Assign more CPU cycles to critical parts of the pipeline such as increase the audio decode thread priority.
+   How to change the priority of g_thread_create function?(gst_task_set_priority/invoke the glibc function nice())
+2. Add a gstrtpjitterbuffer after udpsrc and set the latency to 1 second, this will buffering the content.
+3. Buffering the video content to sync the auodio.
+   Add an queue and set the value of min-threshold-time as diff between auido and video.
+   Need to check the max-size-xxx too since it will cause the data cannot be output.
+4. Increase the audio buffer “max-size-buffers”, “max-size-bytes” ,“max-size-time” to reduce the time of restore.
+
+RTP data --->gstrtpjitterbuffer --->rtpmp2tdepay --->aiurdemux --->videoqueue --->vpudec --->delayqueue --->mfw_v4lsink
+                                                               --->audioqueue --->aacparse --->beepdec --->alsasink
+The import output point of Audio/Video demuxer: aiurdemux.c 
+in function: aiurdemux_push_pad_buffer()
+The import output point of Video decoder(vpudec.c)
+in function: gst_vpudec_show_frame()
+The import output point of Audio decoder(beepdec.c)
+in function: gst_beepdec_chain()
+
+Question? How to know it used hardware or software demux/decode in this case?
+/*
+Read the related API from the *.so file and used by CORE_API.
+So it's based on software.
+*/
+aiurdemux.c
+->gst_aiurdemux_setcaps
+->aiur_core_create_interface_from_caps (caps);
+->_aiur_core_find_match_dlentry
+->aiur_get_core_entry(aiur_registry.arm11.cf and find the related so file)
+->CORE_API (inf, getFileNextSample...)
+
+beepdec.c
+->gst_beepdec_setcaps
+->beep_core_create_interface_from_caps
+->_beep_core_find_match_dlentry
+->beep_get_core_entry(beep_registry.arm11.cf and find the related so file)
+->CORE_API (beepdec->beep_interface, setDecoderPara...)
+
+/*
+It directly call the function from libfslvpuwrap by CORE_API.
+So it's based on hardware.
+*/
+vpudec.c / related libfslvpuwrap-1.0.35-2.tar.gz
+
+
+The sequance how to write your own audio/video player. 
+1. initial the ENV.
+   gst_init (&argc, &argv); 
+2. /* create a new pipeline to hold the elements */
+   pipeline = gst_pipeline_new ("pipeline");
+3. Create the element for pipeline , the related element is initial by kind of plugin_init.
+   gst_element_factory_make
+    
+3.1  gst_element_factory_make("udpsrc","myrtpsource");
+3.2  gst_element_factory_make("rtpmp2tdepay","myrtpmp2");
+3.3  gst_element_factory_make("aiurdemux","myaiurdemux");
+3.4  gst_element_factory_make("queue2","videoqueue");
+3.5  gst_element_factory_make("vpudec","videodecode");
+3.6  gst_element_factory_make("mfw_v4lsink","videooutput");
+3.7  gst_element_factory_make("queue2","audioqueue");
+3.8  gst_element_factory_make("aacparse","audioparse");
+3.9  gst_element_factory_make("beepdec","audiodecode");
+3.10 gst_element_factory_make("alsasink","audiooutput");
+
+4. Link them together and change the status of pipeline to PLAYING.
+
+
+/*
+This is the sample code to emulate the miracast app
+Refer helloworld.c and spider_seek.c 
+*/
+int main(int argc,char* argv[])
+{
+
+GstElement *pipeline, *source, *rtpmp2tdepay, *demuxer, *audioqueue, *videoqueue, *audio_parse, *audio_decoder, 
+           *video_decoder, *audio_sink, *video_sink;
+GstBin *Bin;
+GstBus *bus;
+GMainLoop *Mainloop;
+
+    gst_init (&argc,&argv);
+
+    Mainloop = g_main_loop_new(NULL,FALSE);
+
+    GstElement *pipeline = gst_pipeline_new("PIPELINE");
+    Bin = GST_BIN(pipeline);
+    bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
+
+
+    source = gst_element_factory_make("udpsrc","rtp based source");
+    g_object_set(G_OBJECT(source),"uri",argv[1],NULL);
+    g_object_set (G_OBJECT(source) "do-timestamp", FLASE, NULL);
+
+    rtpmp2tdepay = gst_element_factory_make("rtpmp2tdepay","rtpmp2 depayloader");
+    demuxer = gst_element_factory_make("aiurdemux","avi-demuxer");
+    g_object_set (G_OBJECT(demuxer) "streaming_latency", 100, NULL);
+
+    audioqueue = gst_element_factory_make("queue2","Queue for audio");
+    videoqueue = gst_element_factory_make("queue2","Queue for video");
+    audio_parse = gst_element_factory_make("aacparse","AAC parser");
+    audio_decoder = gst_element_factory_make("beepdec","Beep dec audio decode");
+    video_decoder = gst_element_factory_make("vpudec","Vpudec video decode");
+    audio_sink = gst_element_factory_make("alsasink","Alsa audio sink");
+    video_sink = gst_element_factory_make("mfw_v4lsink","V4l2 video sink ");
+
+    if( !source || !rtpmp2tdepay || !demuxer || !audioqueue || !videoqueue || !audio_parse || !audio_decoder || !video_decoder
+        || !audio_sink || !video_sink  )
+    {   g_print("Could not not create gst element\n");
+        return 0;
+    }
+    gst_bin_add(Bin,source);
+    gst_bin_add_many(
+        Bin,
+        rtpmp2tdepay,
+        demuxer,
+        audioqueue,videoqueue,
+        audio_parse,
+        audio_decoder,
+        video_decoder,
+        audio_sink,video_sink,
+        NULL);
+
+    gst_element_link_many(source,rtpmp2tdepay,demuxer,NULL);
+    gst_element_link_many(audioqueue,audio_parse,audio_decoder,audio_sink,NULL);
+    gst_element_link_many(videoqueue,video_decoder,video_sink,NULL);
+
+/*
+demuxer and decoder are passed as instance and data as pads of both the elements are linked in dynamic_pad_added_cb
+*/
+    g_signal_connect(demuxer,"pad-added",G_CALLBACK(dynamic_pad_added_cb),NULL);
+    gst_bus_add_watch(bus,process_message,Mainloop); 
+    g_object_unref(bus);
+    gst_element_set_state(pipeline,GST_STATE_PLAYING);
+
+    g_main_loop_run(Mainloop);
+
+}
+
+static void
+dynamic_pad_added_cb (GstElement * rtpbin, GstPad * new_pad, GstElement * dec)
+{
+	GstPad *sinkpad;
+	GstPadLinkReturn lres;
+
+	if (strncmp("audio",GST_PAD_NAME (new_pad), 5) == 0) {
+		sinkpad = gst_element_get_static_pad (audioqueue, "sink");
+		g_assert (sinkpad);
+	} else if (strncmp("video",GST_PAD_NAME (new_pad), 5) == 0){ 
+		sinkpad = gst_element_get_static_pad (videoqueue, "sink");
+		g_assert (sinkpad);
+	} else {
+		return;
+	}
+
+	lres = gst_pad_link (new_pad, sinkpad);
+	g_assert (lres == GST_PAD_LINK_OK);
+	gst_object_unref (sinkpad);
+}
+----------------
+
+Entry porint of demuxer analysis: aiur.c ->plugin_init ->GST_TYPE_AIURDEMUX ->gst_aiurdemux_get_type
+gst_aiurdemux_class_init: initial the property option.
+gst_aiurdemux_base_init: initial the source pad.
+gst_aiurdemux_init : initial the sink pad and related function.
+/*
+Read the related API from the *.so file and used by CORE_API
+How to know it used hardware or software demux in this case?
+check demux->core_interface = aiur_core_create_interface_from_caps (caps);
+*/
+
+
+gst_aiurdemux_init()
+gst_pad_set_chain_function (aiurdemux->sinkpad,GST_DEBUG_FUNCPTR (gst_aiurdemux_chain))
+The chain function is the function in which all data processing takes place.
+It will receive and process the input data on the sinkpad.
+set on their sink pad and push buffers on their source pad(s). We call this the push-mode because a peer
+element will use gst_pad_push () on a srcpad, which will cause our _chain ()-function to be
+called, which in turn causes our element to push out a buffer on the source pad. The initiative to start the
+dataflow happens somewhere upstream when it pushes out a buffer and all downstream elements get
+scheduled when their _chain ()-functions are called in turn.
+
+gst_aiurdemux_init()
+gst_pad_set_event_function
+The event function notifies you of special events that happen in the datastream (such as caps,end-of-stream, newsegment, tags, etc.). 
+Events can travel both upstream and downstream, so you can receive them on sink pads as well as source pads.
+
+gst_pad_set_query_function
+through the query function, your element will receive queries that it has to reply to. These are queries
+like position, duration but also about the supported formats and scheduling modes your element supports.
+Queries can travel both upstream and downstream, so you can receive them on sink pads as well as
+source pads.
+
+During the element state change of READY->PAUSED, the pads of an element will be activated. 
+This happens first on the source pads and then on the sink pads of the element. 
+GStreamer calls the _activate () of a pad. By default this function will activate the pad in push-mode by calling
+gst_pad_activate_mode () with the GST_PAD_MODE_PUSH scheduling mode. It is possible to
+override the _activate () of a pad and decide on a different scheduling mode.
+You can know in what scheduling mode a pad is activated by overriding the _activate_mode ()-function.
+
+
+GST_STATE_PAUSED is the state in which an element is ready to accept and handle data. For most
+elements this state is the same as PLAYING. The only exception to this rule are sink elements. Sink
+elements only accept one single buffer of data and then block. At this point the pipeline is ’prerolled’ and
+ready to render data immediately.
+
+GST_STATE_PLAYING is the highest state that an element can be in. For most elements this state is
+exactly the same as PAUSED, they accept and process events and buffers with data. Only sink elements
+need to differentiate between PAUSED and PLAYING state. In PLAYING state, sink elements actually
+render incoming data, e.g. output audio to a sound card or render video pictures to an image sink.
+
+sync flag:
+
+sync is FALSE, incomming samples will be played as fast as possible.
+sync is TRUE, the timestamps of the incomming buffers will be used to schedule the exact render time of its contents.
+
+
+
+This is the command to simulate the RTP data by gst-launch command.
+Client side used network mode.
+gst-launch udpsrc do-timestamp=false uri=udp://192.168.2.1:5004 caps="application/x-rtp" ! rtpmp2tdepay ! aiurdemux streaming_latency=100 name=d d. ! queue ! vpudec low-latency=true ! queue ! mfw_v4lsink sync=true d. ! queue ! aacparse ! beepdec ! alsasink sync=true
+
+
+Client side used locale mode.
+gst-launch filesrc location=/mnt/usb/Video/2098646.ts typefind=true ! aiurdemux streaming_latency=100 name=d d. ! queue ! vpudec low-latency=true ! queue ! mfw_v4lsink sync=true d. ! queue ! aacparse ! beepdec ! alsasink sync=true
+
+
+gst-launch udpsrc do-timestamp=false uri=udp://192.168.2.1:5004 caps="application/x-rtp" ! rtpmp2tdepay ! aiurdemux streaming_latency=100 name=d d. ! queue max-size-buffers=0 max-size-bytes=0 max-size-time=0 ! vpudec low-latency=true ! queue max-size-buffers=0 max-size-bytes=0 max-size-time=0 ! mfw_v4lsink sync=true d. ! queue max-size-buffers=0 max-size-bytes=0 max-size-time=0 ! aacparse ! beepdec ! queue max-size-buffers=0 max-size-bytes=0 max-size-time=0! alsasink sync=true &
+
+gst-launch udpsrc do-timestamp=false uri=udp://192.168.2.1:5004 caps="application/x-rtp" ! rtpmp2tdepay ! aiurdemux streaming_latency=100 name=d d. ! queue ! vpudec low-latency=true ! queue ! mfw_v4lsink sync=true d. ! queue ! aacparse ! beepdec ! alsasink sync=true &
+
+
+
+gst-launch udpsrc do-timestamp=false uri=udp://192.168.2.1:5004 caps="application/x-rtp" ! rtpmp2tdepay ! aiurdemux streaming_latency=100 name=d d. ! queue max-size-buffers=0 max-size-bytes=0 max-size-time=0 ! vpudec low-latency=true  ! queue max-size-buffers=0 max-size-bytes=0 max-size-time=0 ! mfw_v4lsink qos=true sync=true d. ! queue max-size-buffers=0 max-size-bytes=0 max-size-time=0 ! aacparse ! beepdec ! queue max-size-buffers=0 max-size-bytes=0 max-size-time=0 ! alsasink qos=true sync=true &
+
+Debug flag:
+
+export GST_DEBUG="*:5,GST_CAPS:4" or export GST_DEBUG=2,alsa*:3
+./myapp
+
+gst-launch example:
+gst-launch-0.10 mfw_v4lsrc capture-mode=4 capture-width=1280 capture-height=720 fps-n=30 num-buffers=2500 blocksize=115200 ! queue2 max-size-buffers=5000 max-size-bytes=0 max-size-time=0 ! ffmpegcolorspace ! mfw_vpuencoder codec-type=0 name=venc  alsasrc num-buffers=2500 ! audio/x-raw-int,rate=32000,channels=1,depth=16 ! audioconvert ! queue2 max-size-buffers=5000 max-size-bytes=0 max-size-time=0 ! mfw_mp3encoder name=aenc matroskamux name=mux ! filesink location=all1_in_one.avi aenc. ! mux. venc. ! mux.
+
+gst-launch rtspsrc location=rtsp://192.168.2.240/jeans.mp4 name=demux demux. ! queue! rtph264depay ! TIViddec2 ! TIDmaiVideoSink sync=false demux. ! queue ! rtpmp4gdepay ! TIAuddec1 ! alsasink sync=false 
+
+gst-launch-0.10 -v videotestsrc ! videorate ! video/x-raw-yuv, framerate=30/1 ! ffmpegcolorspace ! x264enc ! rtph264pay ! udpsink port=50000 host=<sender IP>
+gst-launch-0.10 udpsrc port=50000 caps="application/x-rtp, media=(string)video, clock-rate=(int)90000 , encoding-name=(string)H264 , payload=(int)96" ! gstrtpjitterbuffer ! rtph264depay ! ffdec_h264 ! ffmpegcolorspace ! videoscale ! "video/x-raw-yuv, width=320, height=240" ! xvimagesink
+
+Miracast library.
+/usr/lib/gstreamer-0.10/libgstwfdsrc.so
+gst_element_factory_create: creating element "wfdsrc" named "rtpsrc"
+/usr/lib/gstreamer-0.10/libgstrtp.so
+gst_element_factory_create: creating element "rtpmp2tdepay" named "rtpmp2tdepay"
+/usr/lib/gstreamer-0.10/libgstwfddemux.so"
+gst_element_factory_create: creating element "wfddemux" named "tsdemux"
+/usr/lib/gstreamer-0.10/libgstcoreelements.so
+gst_element_factory_create: creating element "queue" named "vqueue"
+/usr/lib/gstreamer-0.10/libmfw_vpu.so
+gst_element_factory_create: creating element "vpudec" named "vpudec"
+/usr/lib/gstreamer-0.10/libmfw_gst_v4lsink.so
+gst_element_factory_create: creating element "mfw_v4lsink" named "vsink"
+gst_element_factory_create: creating element "queue" named "aqueue"
+/usr/lib/gstreamer-0.10/libmfw_gst_aacdec.so
+gst_element_factory_create: creating element "mfw_aacdecoder" named "audiodec"
+/usr/lib/gstreamer-0.10/libgstalsa.so
+gst_element_factory_create: creating element "alsasink" named "asink"
+/usr/lib/gstreamer-0.10/libgstrtpmanager.so
+gst_element_factory_create: creating element "gstrtpbin" named "rtpbin"
+gst_element_factory_create: creating element "gstrtpsession"
+gst_element_factory_create: creating element "gstrtpssrcdemux"
+
+
+Simple data flow: 
+
+gst_base_src_change_state ->gst_base_src_loop ->gst_base_src_get_range ->gst_base_src_wait_playing ->gst_udpsrc_create -> recvfrom
+->gst_pad_push_event ->gst_rtp_jitter_buffer_sink_event ->gst_rtp_jitter_buffer_src_activate_push 
+->gst_rtp_jitter_buffer_chain(GstRTPPayloadInfo the PT of MP2T is 33) ->gst_rtp_jitter_buffer_loop(First buffer/First packet)
+->(check 'Taking slow path') ->gst_base_rtp_depayload_chain ->gst_rtp_mp2t_depay_process
+->gst_aiurdemux_handle_sink_event ->gst_aiurdemux_chain(it will cache 200k since cache_stream_preserve_size)
+->aiurdemux_sink_activate_push ->aiurdemux_push_task ->aiurdemux_loop_state_movie ->aiurdemux_push_pad_buffer
+
+check gst_base_sink_query_latency to get max latency.
+change nReorderEnable from 1 to 0.
+vpudec->context.openparam.nReorderEnable = 0;
+PATCH:
+    open vpu_wrapper.c
+    change pObj->iframesearch_allowed=1 to 0
+    change sDecOpenParam.reorderEnable=1 to 0
+
+/*This is real case*/
+#include <gst/gst.h>
+GstElement *vqueue, *vpudec, *vsink, *aqueue, *aacparse, *audiodec, *asink;
+static void
+demux_pad_added_cb (GstElement * rtpbin, GstPad * new_pad, GstElement * dec)
+{
+	GstPad *sinkpad;
+	GstPadLinkReturn lres;
+
+	if (strncmp("audio",GST_PAD_NAME (new_pad), 5) == 0) {
+		sinkpad = gst_element_get_static_pad (aqueue, "sink");
+		g_assert (sinkpad);
+	} else if (strncmp("video",GST_PAD_NAME (new_pad), 5) == 0){ 
+		sinkpad = gst_element_get_static_pad (vqueue, "sink");
+		g_assert (sinkpad);
+	} else {
+		return;
+	}
+
+	lres = gst_pad_link (new_pad, sinkpad);
+	g_assert (lres == GST_PAD_LINK_OK);
+	gst_object_unref (sinkpad);
+}
+
+int player_create(GstElement *pipeline, GstElement **ptsdemux, GstElement **pvsink,
+		unsigned int guiX, unsigned int guiY, 
+		unsigned int guiW, unsigned int guiH,
+		unsigned int func)
+{
+	gboolean res;
+	GstElement *tsdemux;
+	GstElement *vsink;
+
+#if 0
+	tsdemux = gst_element_factory_make("aiurdemux", "tsdemux");
+	g_object_set(G_OBJECT(tsdemux), "streaming-latency", 300, NULL);
+#endif
+	tsdemux = gst_element_factory_make("wfddemux", "tsdemux");
+	g_object_set(G_OBJECT(tsdemux), "latency", 0, NULL);
+	g_object_set(G_OBJECT(tsdemux), "decryptfunc", func, NULL);
+	g_assert(tsdemux );
+
+	vqueue = gst_element_factory_make("queue", "vqueue");
+	g_assert(vqueue);
+	g_object_set(G_OBJECT(vqueue), "max-size-buffers", 0, NULL, NULL);
+	g_object_set(G_OBJECT(vqueue), "max-size-time", 0, NULL, NULL);
+
+	vpudec = gst_element_factory_make("vpudec", "vpudec");
+	g_assert(vpudec );
+	/*VPU Set*/
+	g_object_set(G_OBJECT(vpudec), "low_latency", TRUE, NULL);
+	g_object_set(G_OBJECT(vpudec), "framedrop", FALSE, NULL);
+	g_object_set(G_OBJECT(vpudec), "frame-plus", 2, NULL);
+
+	vsink = gst_element_factory_make("mfw_v4lsink", "vsink");
+	g_assert(vsink );
+	/*VSink Set*/
+	g_object_set(G_OBJECT(vsink), "device", "/dev/video17", NULL);
+	g_object_set(G_OBJECT(vsink), "sync", FALSE, NULL);
+	g_object_set(G_OBJECT(vsink), "async", FALSE, NULL);	
+	g_object_set(G_OBJECT(vsink), "axis-left", guiX, NULL);
+	g_object_set(G_OBJECT(vsink), "axis-top", guiY, NULL);
+	g_object_set(G_OBJECT(vsink), "disp-width", guiW, NULL);
+	g_object_set(G_OBJECT(vsink), "disp-height", guiH, NULL);
+	g_object_set(G_OBJECT(vsink), "max-lateness", -1ll, NULL);
+
+	aqueue = gst_element_factory_make("queue", "aqueue");
+	g_assert(aqueue);
+	g_object_set(G_OBJECT(aqueue), "max-size-buffers", 0, NULL);
+	g_object_set(G_OBJECT(aqueue), "max-size-time", 0, NULL);
+
+	aacparse = gst_element_factory_make("aacparse", "aacparse");
+	g_assert(aacparse);
+
+	audiodec = gst_element_factory_make("beepdec", "audiodec");
+	g_assert(audiodec);
+
+	/*ASink*/
+	asink = gst_element_factory_make("alsasink", "asink");
+	g_object_set(G_OBJECT(asink), "sync", FALSE, NULL);
+	g_object_set(G_OBJECT(asink), "async", FALSE, NULL);
+	g_object_set(G_OBJECT(asink), "max-lateness", -1ll, NULL);
+	g_assert(asink );
+
+	gst_bin_add_many(GST_BIN(pipeline), tsdemux, vqueue, vpudec, vsink, aqueue, aacparse, audiodec, asink, NULL);
+
+	res = gst_element_link_many(vqueue, vpudec, vsink, NULL);
+	g_assert(res==TRUE);
+
+	res = gst_element_link_many(aqueue, aacparse, audiodec, asink, NULL);
+	g_assert(res==TRUE);
+
+	g_signal_connect (tsdemux, "pad-added", G_CALLBACK (demux_pad_added_cb), NULL);
+
+	*ptsdemux = tsdemux;
+	*pvsink = vsink;
+
+	return 0;
+}
+
+
+Multi-Display
+Multiple video playback on multiple screens (one video per screen).
+2x1080p video + capture
+
+Video 1 to monitor 1
+gst-launch filesrc location= <VIDEO1> typefind=true ! aiurdemux ! queue ! vpudec ! mfw_v4lsink device=/dev/video16 &
+
+Video 2 to monitor 2
+gst-launch filesrc location= <VIDEO2> typefind=true ! aiurdemux ! queue ! vpudec ! mfw_v4lsink device=/dev/video18 &
+
+Video capture to monitor 3
+gst-launch mfw_v4lsrc ! mfw_v4lsink device=/dev/video20 &
+
+3x720p video
+Video 1 to monitor 1
+gst-launch filesrc location= <VIDEO1> typefind=true ! aiurdemux ! queue ! vpudec ! mfw_v4lsink device=/dev/video16 &
+
+Video 2 to monitor 2
+gst-launch filesrc location= <VIDEO2> typefind=true ! aiurdemux ! queue ! vpudec ! mfw_v4lsink device=/dev/video18 &
+
+Video 3 to monitor 3
+gst-launch filesrc location= <VIDEO3> typefind=true ! aiurdemux ! queue ! vpudec ! mfw_v4lsink device=/dev/video20 &
+
+720p video overlay on HDMI monitor
+To select first monitor use the following command.
+DISP=mon1
+
+Note: for the other monitors use.
+Second monitor: mon2
+Third monitor: mon3 
+
+Video 1 in left corner
+gst-launch filesrc location= <VIDEO1> typefind=true ! aiurdemux ! queue ! vpudec ! mfw_isink display=$DISP axis-left=0 axis-top=0 disp-width=320 disp-height=240 &
+
+Video 2 in the middle
+gst-launch filesrc location= <VIDEO2> typefind=true ! aiurdemux ! queue ! vpudec ! mfw_isink display=$DISP axis-left=340 axis-top=0 disp-width=320 disp-height=240 &
+
+Video 3 in right corner
+gst-launch filesrc location= <VIDEO3> typefind=true ! aiurdemux ! queue ! vpudec ! mfw_isink display=$DISP axis-left=680 axis-top=0 disp-width=320 disp-height=240 &
+
+
+RTP Video Streaming
+These instructions show how to do video streaming over the network, a video will be played on the board and viewed on the host. These pipelines use the default port (4951) to send the packets, if you want to change the port number, you have to add the port capability to the udpsink.(e.g udpsink port=$PORT host=$CLIENT_IP)
+Stream H.264 video test pattern over RTP
+
+Server: iMX6 
+CLIENT_IP=10.251.101.58
+gst-launch videotestsrc ! vpuenc  codec=6 ! queue ! h264parse ! rtph264pay ! udpsink host=$CLIENT_IP -v
+This pipeline is going to print the capabilities of each element's pad thanks to the -v option. The pipeline should print something similar to this output:
+
+/GstPipeline:pipeline0/GstVideoTestSrc:videotestsrc0.GstPad:src: caps = video/x-raw-yuv, format=(fourcc)NV12, 
+color-matrix=(string)sdtv, chroma-site=(string)mpeg2, width=(int)320, height=(int)240, framerate=(fraction)30/1
+Pipeline is PREROLLING ...
+/GstPipeline:pipeline0/GstVpuEnc:vpuenc0.GstPad:sink: caps = video/x-raw-yuv, format=(fourcc)NV12, 
+color-matrix=(string)sdtv, chroma-site=(string)mpeg2, width=(int)320, height=(int)240, framerate=(fraction)30/1
+[INFO]	chromaInterleave 1, mapType 0, linear2TiledEnable 0
+/GstPipeline:pipeline0/GstVpuEnc:vpuenc0.GstPad:src: caps = video/x-h264, width=(int)320, 
+height=(int)240, framerate=(fraction)30/1, framed=(boolean)true
+/GstPipeline:pipeline0/GstH264Parse:h264parse0.GstPad:src: caps = video/x-h264, width=(int)320, height=(int)240, 
+framerate=(fraction)30/1, framed=(boolean)true, parsed=(boolean)true, stream-format=(string)byte-stream, alignment=(string)au
+/GstPipeline:pipeline0/GstH264Parse:h264parse0.GstPad:sink: caps = video/x-h264, width=(int)320, height=(int)240, 
+framerate=(fraction)30/1, framed=(boolean)true
+/GstPipeline:pipeline0/GstQueue:queue0.GstPad:sink: caps = video/x-h264, width=(int)320, height=(int)240, 
+framerate=(fraction)30/1, framed=(boolean)true, parsed=(boolean)true, stream-format=(string)byte-stream, alignment=(string)au
+/GstPipeline:pipeline0/GstQueue:queue0.GstPad:src: caps = video/x-h264, width=(int)320, height=(int)240, 
+framerate=(fraction)30/1, framed=(boolean)true, parsed=(boolean)true, stream-format=(string)byte-stream, alignment=(string)au
+/GstPipeline:pipeline0/GstRtpH264Pay:rtph264pay0.GstPad:sink: caps = video/x-h264, width=(int)320, height=(int)240, 
+framerate=(fraction)30/1, framed=(boolean)true, parsed=(boolean)true, stream-format=(string)byte-stream, alignment=(string)au
+/GstPipeline:pipeline0/GstRtpH264Pay:rtph264pay0.GstPad:src: caps = application/x-rtp, media=(string)video, 
+clock-rate=(int)90000, encoding-name=(string)H264, sprop-parameter-sets=(string)\"Z0JAFKaBQfkA\\,aM4wpIAA\", payload=(int)96, 
+ssrc=(uint)87645921, clock-base=(uint)1548379595, seqnum-base=(uint)847
+/GstPipeline:pipeline0/GstRtpH264Pay:rtph264pay0: timestamp = 1548379595
+/GstPipeline:pipeline0/GstRtpH264Pay:rtph264pay0: seqnum = 847
+/GstPipeline:pipeline0/GstUDPSink:udpsink0.GstPad:sink: caps = application/x-rtp, media=(string)video, 
+clock-rate=(int)90000, encoding-name=(string)H264, sprop-parameter-sets=(string)\"Z0JAFKaBQfkA\\,aM4wpIAA\", payload=(int)96, 
+ssrc=(uint)87645921, clock-base=(uint)1548379595, seqnum-base=(uint)847  
+
+You need the udpsink:sink capabilities for the client pipeline.
+
+Client: Ubuntu PC 
+Copy the udpsink caps given by the server pipeline, erase the spaces and the (uint) cast.
+CAPS=application/x-rtp, media=(string)video,clock-rate=(int)90000, encoding-name=(string)H264,
+sprop-parameter-sets=(string)"Z0JAFKaBQfkA\,aM4wpIAA",payload=(int)96,ssrc=87645921, clock-base=1548379595,seqnum-base=847
+PORT=4951
+gst-launch udpsrc port=$PORT ! $CAPS ! rtph264depay ! queue ! ffdec_h264 ! xvimagesink sync=false -v
